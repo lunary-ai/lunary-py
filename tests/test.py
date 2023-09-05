@@ -1,6 +1,7 @@
 import openai
 import asyncio
-from llmonitor import monitor, agent, tool
+from llmonitor import monitor, tool
+from tests import agent
 
 openai.api_key = "..."
 
@@ -15,6 +16,7 @@ def my_agent(a, b, c, test, test2):
         messages=[{"role": "user", "content": "Hello world"}],
         user_id="123",
     )
+    print(output)
     tool2()
     return "Agent output"
 

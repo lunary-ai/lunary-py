@@ -1,5 +1,5 @@
 import unittest
-from llmonitor import default_input_parser, agent
+from llmonitor import agent, default_input_parser
 
 
 class TestInputParser(unittest.TestCase):
