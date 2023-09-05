@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "llmonitor"
+version = "0.0.2"
+description = "Observability and monitoring for AI apps"
+authors = ["llmonitor <hello@llmonitor.com>"]
+readme = "README.md"
+repository = "https://github.com/llmonitor/llmonitor-py/"
+documentation = "https://llmonitor.com/docs/py/usage"
+keywords = [
+    "LLMonitor",
+    "Langchain",
+    "AI",
+    "Analytics",
+    "Monitoring"
+]
+
+[tool.poetry.dependencies]
+python = "^3.7.1"
+requests = "^2.31.0"
+
+[tool.poetry.group.dev.dependencies]
+openai = "^0.28.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
