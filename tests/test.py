@@ -1,7 +1,7 @@
 import openai
 import asyncio
-from llmonitor import monitor, tool
-from tests import agent
+from llmonitor import monitor, tool, agent
+# from tests import agent
 
 openai.api_key = "..."
 
