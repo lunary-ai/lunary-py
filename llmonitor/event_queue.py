@@ -51,10 +51,9 @@ class EventQueue:
         self.interval = interval
         self.api_url = api_url
         self.lock = threading.Lock()
-    #     self.start_timer()
+
 
     def add_event(self, event):
-        print('add_event', event)
         with self.lock:
             self.queue.append(event)
             self.send_events()
@@ -64,7 +63,6 @@ class EventQueue:
         with self.lock:
             batch = self.queue
             self.queue = []
-
 
         if batch:
             try:
@@ -78,8 +76,3 @@ class EventQueue:
                     print("Error sending events")
             except Exception as e:
                 self.add_event(batch)
-
-        # self.start_timer()
-
-    # def start_timer(self):
-    #     threading.Timer(self.interval, self.send_events).start()

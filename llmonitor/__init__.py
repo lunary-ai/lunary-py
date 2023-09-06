@@ -22,16 +22,18 @@ TODO:
 - [X] use decorator for tools and agents
 - [X] test with async
 - [X] better serialization for args/kwargs
+- [X] find a way to exit the program when the queue is empty (after a certain time? Or maybe we should never exit)
 - [~] tests agents 
+- [ ] support openai stream=True 
 - [ ] tests tools
 - [ ] tests openai
-- [ ] find a way to exit the program when the queue is empty (after a certain time? Or maybe we should never exit)
 - [ ] make it work with langchain callbacks
 - [ ] add source  (llmonitor-py?)
 """
 
 API_URL = os.environ.get("LLMONITOR_API_URL", "https://app.llmonitor.com")
 APP_ID = os.environ.get("LLMONITOR_APP_ID")
+VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
 
 ctx = ContextVar("run_ids", default=None)
 
@@ -51,6 +53,9 @@ def track_event(
     user_id=None,
     tags=None,
 ):
+    if not APP_ID:
+        return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
+
     event = {
         "event": event_name,
         "type": event_type,
@@ -66,6 +71,10 @@ def track_event(
         "error": error,
         "tokensUsage": token_usage,
     }
+
+    if VERBOSE:
+        print('llmonitor_add_event', event)
+
     queue.add_event(event)
 
 
@@ -93,6 +102,7 @@ def wrap(
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
                 user_id=user_id or kwargs.pop("user_id", None),
+                tags=tags,
             )
             output = fn(*args, **kwargs)
             parsed_output = output_parser(output)
@@ -133,6 +143,7 @@ def wrap(
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
                 user_id=user_id,
+                tags=tags,
             )
             output = await fn(*args, **kwargs)
             parsed_output = output_parser(output)
