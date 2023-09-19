@@ -47,9 +47,12 @@ def debounce(wait):
 
 class EventQueue:
     def __init__(self, api_url, interval=0.5):
+        # Read here in case module imported before loadenv
+        API_URL = os.environ.get("LLMONITOR_API_URL")
+
         self.queue = []
         self.interval = interval
-        self.api_url = api_url
+        self.api_url = f"{API_URL}/api/report"
         self.lock = threading.Lock()
 
 

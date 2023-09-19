@@ -23,21 +23,17 @@ TODO:
 - [X] test with async
 - [X] better serialization for args/kwargs
 - [X] find a way to exit the program when the queue is empty (after a certain time? Or maybe we should never exit)
+- [X] add source  (llmonitor-py?)
 - [~] tests agents 
 - [ ] support openai stream=True 
 - [ ] tests tools
 - [ ] tests openai
 - [ ] make it work with langchain callbacks
-- [ ] add source  (llmonitor-py?)
 """
-
-API_URL = os.environ.get("LLMONITOR_API_URL", "https://app.llmonitor.com")
-APP_ID = os.environ.get("LLMONITOR_APP_ID")
-VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
 
 ctx = ContextVar("run_ids", default=None)
 
-queue = EventQueue(api_url=f"{API_URL}/api/report")
+queue = EventQueue()
 
 
 def track_event(
@@ -53,6 +49,10 @@ def track_event(
     user_id=None,
     tags=None,
 ):
+    # Add here in case the module is imported before the env vars are set
+    APP_ID = os.environ.get("LLMONITOR_APP_ID")
+    VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
+
     if not APP_ID:
         return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 
@@ -69,6 +69,7 @@ def track_event(
         "input": input,
         "output": output,
         "error": error,
+        "runtime": "llmonitor-py",
         "tokensUsage": token_usage,
     }
 
@@ -77,19 +78,20 @@ def track_event(
 
     queue.add_event(event)
 
-
 def wrap(
     fn,
     type=None,
     name=None,
     user_id=None,
+    user_props=None,
+    parent_run_id=None,
     tags=None,
     input_parser=default_input_parser,
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
         try:
-            parent_run_id = ctx.get()
+            parent_run_id = parent_run_id or ctx.get()
             run_id = uuid.uuid4()
             token = ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
@@ -102,6 +104,7 @@ def wrap(
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
                 user_id=user_id or kwargs.pop("user_id", None),
+                user_props=user_props or kwargs.pop("user_props", None),
                 tags=tags,
             )
             output = fn(*args, **kwargs)
@@ -109,9 +112,10 @@ def wrap(
 
             track_event(
                 type,
-                "end",
+                "end"
                 run_id,
-                parent_run_id,
+                # Need name in case need to compute tokens usage server side,
+                name=name or parsed_input["name"],
                 output=parsed_output["output"],
                 token_usage=parsed_output["tokensUsage"],
             )
@@ -121,7 +125,6 @@ def wrap(
                 type,
                 "error",
                 run_id,
-                parent_run_id,
                 error={"message": str(e), "stack": traceback.format_exc()},
             )
         finally:
@@ -129,11 +132,10 @@ def wrap(
 
     async def async_wrapper(*args, **kwargs):
         try:
-            parent_run_id = ctx.get()
+            parent_run_id = parent_run_id or ctx.get()
             run_id = uuid.uuid4()
             token = ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
-            user_id = kwargs.pop("user_id", None)
 
             track_event(
                 type,
@@ -142,18 +144,20 @@ def wrap(
                 parent_run_id,
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
-                user_id=user_id,
+                user_id=user_id or kwargs.pop("user_id", None)
+                user_props=user_props or kwargs.pop("user_props", None)
                 tags=tags,
             )
             output = await fn(*args, **kwargs)
             parsed_output = output_parser(output)
-            print(parsed_output)
 
             track_event(
                 type,
                 "end",
                 run_id,
                 parent_run_id,
+                # Need name in case need to compute tokens usage server side
+                name=name or parsed_input["name"], 
                 output=parsed_output["output"],
                 token_usage=parsed_output["tokensUsage"],
             )
@@ -192,13 +196,15 @@ def monitor(object: OpenAIUtils):
         warnings.warn("You cannot monitor this object")
 
 
-def agent(name=None, user_id=None, tags=None):
+def agent(name=None, user_id=None, user_props=None, tags=None, parent_run_id=None):
     def decorator(fn):
         return wrap(
             fn,
             "agent",
             name=name or fn.__name__,
             user_id=user_id,
+            user_props=user_props,
+            parent_run_id=parent_run_id,
             tags=tags,
             input_parser=default_input_parser,
         )
@@ -206,13 +212,15 @@ def agent(name=None, user_id=None, tags=None):
     return decorator
 
 
-def tool(name=None, user_id=None, tags=None):
+def tool(name=None, user_id=None, user_props=None, tags=None, parent_run_id=None):
     def decorator(fn):
         return wrap(
             fn,
             "tool",
             name=name or fn.__name__,
             user_id=user_id,
+            user_props=user_props,
+            parent_run_id=parent_run_id,
             tags=tags,
             input_parser=default_input_parser,
         )
