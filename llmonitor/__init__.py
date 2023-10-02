@@ -2,6 +2,7 @@ import asyncio, uuid, os, warnings
 import traceback
 from contextvars import ContextVar
 from datetime import datetime
+from dotenv import load_dotenv
 
 from .parsers import (
     default_input_parser,
@@ -9,50 +10,39 @@ from .parsers import (
 )
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
+from .consumer import Consumer
+from .users import user_ctx, user_props_ctx
 
 
-"""
-TODO:  
-- [X] queue
-- [X] test queue is working properly
-- [X] default parse input/output
-- [X] parse openai input/output
-- [X] user_id openai
-- [X] exceptions
-- [X] use decorator for tools and agents
-- [X] test with async
-- [X] better serialization for args/kwargs
-- [X] find a way to exit the program when the queue is empty (after a certain time? Or maybe we should never exit)
-- [X] add source  (llmonitor-py?)
-- [~] tests agents 
-- [ ] support openai stream=True 
-- [ ] tests tools
-- [ ] tests openai
-- [ ] make it work with langchain callbacks
-"""
+load_dotenv()
+APP_ID = os.environ.get("LLMONITOR_APP_ID")
+VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
+API_URL = os.environ.get("LLMONITOR_API_URL")
 
-ctx = ContextVar("run_ids", default=None)
+
+run_ctx = ContextVar("run_ids", default=None)
+
 
 queue = EventQueue()
+consumer = Consumer(queue, api_url=API_URL)
+
+consumer.start()
 
 
 def track_event(
     event_type,
     event_name,
     run_id,
-    parent_run_id,
+    parent_run_id=None,
     name=None,
     input=None,
     output=None,
     error=None,
     token_usage=None,
     user_id=None,
+    user_props=None,
     tags=None,
 ):
-    # Add here in case the module is imported before the env vars are set
-    APP_ID = os.environ.get("LLMONITOR_APP_ID")
-    VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
-
     if not APP_ID:
         return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 
@@ -62,6 +52,7 @@ def track_event(
         "app": APP_ID,
         "name": name,
         "userId": user_id,
+        "userProps": user_props,
         "tags": tags,
         "runId": str(run_id),
         "parentRunId": str(parent_run_id) if parent_run_id else None,
@@ -74,9 +65,10 @@ def track_event(
     }
 
     if VERBOSE:
-        print('llmonitor_add_event', event)
+        print("llmonitor_add_event", event)
 
-    queue.add_event(event)
+    queue.append(event)
+
 
 def wrap(
     fn,
@@ -90,10 +82,11 @@ def wrap(
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
+        nonlocal parent_run_id
         try:
-            parent_run_id = parent_run_id or ctx.get()
+            parent_run_id = parent_run_id or run_ctx.get()
             run_id = uuid.uuid4()
-            token = ctx.set(run_id)
+            token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
 
             track_event(
@@ -103,8 +96,8 @@ def wrap(
                 parent_run_id,
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
-                user_id=user_id or kwargs.pop("user_id", None),
-                user_props=user_props or kwargs.pop("user_props", None),
+                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
+                user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
                 tags=tags,
             )
             output = fn(*args, **kwargs)
@@ -112,7 +105,7 @@ def wrap(
 
             track_event(
                 type,
-                "end"
+                "end",
                 run_id,
                 # Need name in case need to compute tokens usage server side,
                 name=name or parsed_input["name"],
@@ -121,6 +114,7 @@ def wrap(
             )
             return output
         except Exception as e:
+            print(e)
             track_event(
                 type,
                 "error",
@@ -128,13 +122,13 @@ def wrap(
                 error={"message": str(e), "stack": traceback.format_exc()},
             )
         finally:
-            ctx.reset(token)
+            run_ctx.reset(token)
 
     async def async_wrapper(*args, **kwargs):
         try:
-            parent_run_id = parent_run_id or ctx.get()
+            parent_run_id = parent_run_id or run_ctx.get()
             run_id = uuid.uuid4()
-            token = ctx.set(run_id)
+            token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
 
             track_event(
@@ -144,8 +138,8 @@ def wrap(
                 parent_run_id,
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
-                user_id=user_id or kwargs.pop("user_id", None)
-                user_props=user_props or kwargs.pop("user_props", None)
+                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
+                user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
                 tags=tags,
             )
             output = await fn(*args, **kwargs)
@@ -157,12 +151,13 @@ def wrap(
                 run_id,
                 parent_run_id,
                 # Need name in case need to compute tokens usage server side
-                name=name or parsed_input["name"], 
+                name=name or parsed_input["name"],
                 output=parsed_output["output"],
                 token_usage=parsed_output["tokensUsage"],
             )
             return output
         except Exception as e:
+            print(e)
             track_event(
                 type,
                 "error",
@@ -171,7 +166,7 @@ def wrap(
                 error={"message": str(e), "stack": traceback.format_exc()},
             )
         finally:
-            ctx.reset(token)
+            run_ctx.reset(token)
 
     return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
 
