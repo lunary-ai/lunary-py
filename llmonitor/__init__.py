@@ -2,7 +2,6 @@ import asyncio, uuid, os, warnings
 import traceback
 from contextvars import ContextVar
 from datetime import datetime
-from dotenv import load_dotenv
 
 from .parsers import (
     default_input_parser,
@@ -14,20 +13,12 @@ from .consumer import Consumer
 from .users import user_ctx, user_props_ctx
 
 
-load_dotenv()
-APP_ID = os.environ.get("LLMONITOR_APP_ID")
-VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
-API_URL = os.environ.get("LLMONITOR_API_URL")
-
-
 run_ctx = ContextVar("run_ids", default=None)
 
-
 queue = EventQueue()
-consumer = Consumer(queue, api_url=API_URL)
+consumer = Consumer(queue)
 
 consumer.start()
-
 
 def track_event(
     event_type,
@@ -43,6 +34,10 @@ def track_event(
     user_props=None,
     tags=None,
 ):
+    # Load here in case load_dotenv done after
+    APP_ID = os.environ.get("LLMONITOR_APP_ID")
+    VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
+
     if not APP_ID:
         return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 

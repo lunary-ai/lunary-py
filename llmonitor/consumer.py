@@ -5,10 +5,11 @@ DEFAULT_API_URL = "https://app.llmonitor.com"
 
 
 class Consumer(Thread):
-    def __init__(self, event_queue, api_url=None):
+   
+    def __init__(self, event_queue):
         self.running = True
         self.event_queue = event_queue
-        self.api_url = api_url or DEFAULT_API_URL
+        self.api_url = os.environ.get("LLMONITOR_API_URL") or DEFAULT_API_URL
 
         Thread.__init__(self, daemon=True)
         atexit.register(self.stop)
