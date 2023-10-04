@@ -1,10 +1,10 @@
 def default_input_parser(*args, **kwargs):
     def serialize(args, kwargs):
         if not args and not kwargs:
-            return ""
+            return None
 
         if len(args) == 1 and not kwargs:
-            return str(args[0])
+            return args[0]
 
         input = list(args)
         if kwargs:

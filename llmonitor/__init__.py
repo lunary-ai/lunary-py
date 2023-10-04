@@ -1,7 +1,7 @@
 import asyncio, uuid, os, warnings
 import traceback
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .parsers import (
     default_input_parser,
@@ -11,7 +11,6 @@ from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
 from .users import user_ctx, user_props_ctx
-
 
 run_ctx = ContextVar("run_ids", default=None)
 
@@ -51,7 +50,7 @@ def track_event(
         "tags": tags,
         "runId": str(run_id),
         "parentRunId": str(parent_run_id) if parent_run_id else None,
-        "timestamp": str(datetime.utcnow()),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "input": input,
         "output": output,
         "error": error,
