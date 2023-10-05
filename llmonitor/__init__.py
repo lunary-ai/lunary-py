@@ -70,15 +70,13 @@ def wrap(
     name=None,
     user_id=None,
     user_props=None,
-    parent_run_id=None,
     tags=None,
     input_parser=default_input_parser,
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
-        nonlocal parent_run_id
         try:
-            parent_run_id = parent_run_id or run_ctx.get()
+            parent_run_id = run_ctx.get()
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
@@ -120,7 +118,7 @@ def wrap(
 
     async def async_wrapper(*args, **kwargs):
         try:
-            parent_run_id = parent_run_id or run_ctx.get()
+            parent_run_id = run_ctx.get()
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
@@ -185,7 +183,7 @@ def monitor(object: OpenAIUtils):
         warnings.warn("You cannot monitor this object")
 
 
-def agent(name=None, user_id=None, user_props=None, tags=None, parent_run_id=None):
+def agent(name=None, user_id=None, user_props=None, tags=None):
     def decorator(fn):
         return wrap(
             fn,
@@ -193,7 +191,6 @@ def agent(name=None, user_id=None, user_props=None, tags=None, parent_run_id=Non
             name=name or fn.__name__,
             user_id=user_id,
             user_props=user_props,
-            parent_run_id=parent_run_id,
             tags=tags,
             input_parser=default_input_parser,
         )
@@ -201,7 +198,7 @@ def agent(name=None, user_id=None, user_props=None, tags=None, parent_run_id=Non
     return decorator
 
 
-def tool(name=None, user_id=None, user_props=None, tags=None, parent_run_id=None):
+def tool(name=None, user_id=None, user_props=None, tags=None):
     def decorator(fn):
         return wrap(
             fn,
@@ -209,7 +206,6 @@ def tool(name=None, user_id=None, user_props=None, tags=None, parent_run_id=None
             name=name or fn.__name__,
             user_id=user_id,
             user_props=user_props,
-            parent_run_id=parent_run_id,
             tags=tags,
             input_parser=default_input_parser,
         )
