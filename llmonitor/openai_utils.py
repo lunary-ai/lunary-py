@@ -8,12 +8,15 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_message(message):
-        return {"role": OpenAIUtils.parse_role(message["role"]), "text": message["content"]}
+        return {
+            "role": OpenAIUtils.parse_role(message["role"]), 
+            "text": message["content"]
+        }
 
     @staticmethod
     def parse_input(*args, **kwargs):
         messages = [OpenAIUtils.parse_message(message) for message in kwargs["messages"]]
-        name = kwargs["model"]
+        name = kwargs.get('model', None) or kwargs.get('engine', None)
         return {
             "name": name,
             "input": messages,
