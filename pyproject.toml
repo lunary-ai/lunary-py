@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llmonitor"
-version = "0.0.13"
+version = "0.0.14"
 description = "Observability and monitoring for AI apps"
 authors = ["llmonitor <hello@llmonitor.com>"]
 readme = "README.md"
