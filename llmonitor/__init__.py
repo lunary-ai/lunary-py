@@ -10,7 +10,7 @@ from .parsers import (
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
-from .users import user_ctx, user_props_ctx
+from .users import user_ctx, user_props_ctx, identify
 
 run_ctx = ContextVar("run_ids", default=None)
 
