@@ -24,13 +24,24 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_output(output):
-        return {
-            "output": {
-                "role": OpenAIUtils.parse_role(output.choices[0].message.role),
-                "text": output.choices[0].message.content,
-            },
-            "tokensUsage": {
-                "completion": output.usage.completion_tokens,
-                "prompt": output.usage.prompt_tokens,
-            },
-        }
+        try:
+            message = output.choices[0].message
+
+            text = None
+            if hasattr(message, 'content') and message.content is not None:
+                text = message.content
+            elif hasattr(message, 'function_call') and message.function_call is not None:
+                text = str(message.function_call)
+
+            return {
+                "output": {
+                    "role": OpenAIUtils.parse_role(output.choices[0].message.role),
+                    "text": text 
+                },
+                "tokensUsage": {
+                    "completion": output.usage.completion_tokens,
+                    "prompt": output.usage.prompt_tokens,
+                },
+            }
+        except Exception as e:
+            print("[LLMonitor] Error parsing output: ", e)

@@ -75,11 +75,13 @@ def wrap(
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
+        output = None
         try:
             parent_run_id = run_ctx.get()
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
+
 
             track_event(
                 type,
@@ -92,6 +94,7 @@ def wrap(
                 user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
                 tags=tags,
             )
+
             output = fn(*args, **kwargs)
             parsed_output = output_parser(output)
 
@@ -106,13 +109,15 @@ def wrap(
             )
             return output
         except Exception as e:
-            print(e)
+            print('[LLMonitor] Error in sync_wrapper: ', e)
+
             track_event(
                 type,
                 "error",
                 run_id,
                 error={"message": str(e), "stack": traceback.format_exc()},
             )
+            return output
         finally:
             run_ctx.reset(token)
 
@@ -149,7 +154,7 @@ def wrap(
             )
             return output
         except Exception as e:
-            print(e)
+            print('[LLMonitor] Error in async_wrapper: ',e)
             track_event(
                 type,
                 "error",
@@ -157,6 +162,7 @@ def wrap(
                 parent_run_id,
                 error={"message": str(e), "stack": traceback.format_exc()},
             )
+            return output
         finally:
             run_ctx.reset(token)
 
