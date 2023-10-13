@@ -1,3 +1,5 @@
+MONITORED_KEYS = ["temperature", "functions", "max_tokens", "frequency_penalty", "stop", "presence_penalty", "function_call"]
+
 class OpenAIUtils:
     @staticmethod
     def parse_role(role):
@@ -8,18 +10,23 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_message(message):
-        return {
+        parsed_message = {
             "role": OpenAIUtils.parse_role(message["role"]), 
             "text": message["content"]
         }
+        if "function_call" in message:
+            parsed_message["functionCall"] = message["function_call"]
+        return parsed_message
 
     @staticmethod
     def parse_input(*args, **kwargs):
         messages = [OpenAIUtils.parse_message(message) for message in kwargs["messages"]]
-        name = kwargs.get('model', None) or kwargs.get('engine', None)
+        name = kwargs.get('model', None) or kwargs.get('engine', None) or kwargs.get('deployment_id', None)
+        extra = {key: kwargs[key] for key in MONITORED_KEYS if key in kwargs}
         return {
             "name": name,
             "input": messages,
+            "extra": extra
         }
 
     @staticmethod
@@ -27,17 +34,8 @@ class OpenAIUtils:
         try:
             message = output.choices[0].message
 
-            text = None
-            if hasattr(message, 'content') and message.content is not None:
-                text = message.content
-            elif hasattr(message, 'function_call') and message.function_call is not None:
-                text = str(message.function_call)
-
             return {
-                "output": {
-                    "role": OpenAIUtils.parse_role(output.choices[0].message.role),
-                    "text": text 
-                },
+                "output": OpenAIUtils.parse_message(message),
                 "tokensUsage": {
                     "completion": output.usage.completion_tokens,
                     "prompt": output.usage.prompt_tokens,

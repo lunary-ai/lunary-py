@@ -8,7 +8,6 @@ load_dotenv()
 
 from llmonitor import monitor
 
-# openai.api_key = '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'
 openai.api_key = os.environ.get("AZURE_OPENAI_KEY")
 openai.api_base = os.environ.get("AZURE_OPENAI_ENDPOINT") # your endpoint should look like the following https://YOUR_RESOURCE_NAME.openai.azure.com/
 openai.api_type = 'azure'

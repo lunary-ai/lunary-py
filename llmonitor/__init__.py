@@ -32,6 +32,7 @@ def track_event(
     user_id=None,
     user_props=None,
     tags=None,
+    extra=None,
 ):
     # Load here in case load_dotenv done after
     APP_ID = os.environ.get("LLMONITOR_APP_ID")
@@ -54,6 +55,7 @@ def track_event(
         "input": input,
         "output": output,
         "error": error,
+        "extra": extra,
         "runtime": "llmonitor-py",
         "tokensUsage": token_usage,
     }
@@ -62,6 +64,9 @@ def track_event(
         print("llmonitor_add_event", event)
 
     queue.append(event)
+
+def handle_internal_error(e):
+    print('[LLMonitor] Error: ', e)
 
 
 def wrap(
@@ -93,9 +98,26 @@ def wrap(
                 user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
                 user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
                 tags=tags,
+                extra=parsed_input["extra"]
+            )
+        except Exception as e:
+            handle_internal_error(e)
+
+        try:
+            output = fn(*args, **kwargs)
+        except Exception as e:
+            track_event(
+                type,
+                "error",
+                run_id,
+                error={"message": str(e), "stack": traceback.format_exc()},
             )
 
-            output = fn(*args, **kwargs)
+            # rethrow error
+            raise e
+            
+        
+        try:
             parsed_output = output_parser(output)
 
             track_event(
@@ -109,19 +131,15 @@ def wrap(
             )
             return output
         except Exception as e:
-            print('[LLMonitor] Error in sync_wrapper: ', e)
+            handle_internal_error(e)
 
-            track_event(
-                type,
-                "error",
-                run_id,
-                error={"message": str(e), "stack": traceback.format_exc()},
-            )
-            return output
-        finally:
-            run_ctx.reset(token)
+    
+        return output
+        
+        run_ctx.reset(token)
 
     async def async_wrapper(*args, **kwargs):
+        output = None
         try:
             parent_run_id = run_ctx.get()
             run_id = uuid.uuid4()
@@ -138,33 +156,43 @@ def wrap(
                 user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
                 user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
                 tags=tags,
+                extra=parsed_input["extra"]
             )
+        except Exception as e:
+            handle_internal_error(e)
+
+        try:
             output = await fn(*args, **kwargs)
+        except Exception as e:
+            track_event(
+                type,
+                "error",
+                run_id,
+                error={"message": str(e), "stack": traceback.format_exc()},
+            )
+
+            # rethrow error
+            raise e
+
+        try:
             parsed_output = output_parser(output)
 
             track_event(
                 type,
                 "end",
                 run_id,
-                parent_run_id,
-                # Need name in case need to compute tokens usage server side
+                # Need name in case need to compute tokens usage server side,
                 name=name or parsed_input["name"],
                 output=parsed_output["output"],
                 token_usage=parsed_output["tokensUsage"],
             )
             return output
         except Exception as e:
-            print('[LLMonitor] Error in async_wrapper: ',e)
-            track_event(
-                type,
-                "error",
-                run_id,
-                parent_run_id,
-                error={"message": str(e), "stack": traceback.format_exc()},
-            )
-            return output
-        finally:
-            run_ctx.reset(token)
+            handle_internal_error(e)
+
+        return output
+
+        run_ctx.reset(token)
 
     return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
 
