@@ -86,6 +86,7 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
+            tags = kwargs.pop('tags', None)
 
 
             track_event(
@@ -145,6 +146,7 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
+            tags = kwargs.pop('tags', None)
 
             track_event(
                 type,
