@@ -134,9 +134,9 @@ def wrap(
             handle_internal_error(e)
 
     
+        run_ctx.reset(token)
         return output
         
-        run_ctx.reset(token)
 
     async def async_wrapper(*args, **kwargs):
         output = None
@@ -190,9 +190,9 @@ def wrap(
         except Exception as e:
             handle_internal_error(e)
 
+        run_ctx.reset(token)
         return output
 
-        run_ctx.reset(token)
 
     return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
 
