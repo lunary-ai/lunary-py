@@ -19,6 +19,7 @@ consumer = Consumer(queue)
 
 consumer.start()
 
+
 def track_event(
     event_type,
     event_name,
@@ -33,6 +34,7 @@ def track_event(
     user_props=None,
     tags=None,
     extra=None,
+    metadata=None,
 ):
     # Load here in case load_dotenv done after
     APP_ID = os.environ.get("LLMONITOR_APP_ID")
@@ -58,6 +60,7 @@ def track_event(
         "extra": extra,
         "runtime": "llmonitor-py",
         "tokensUsage": token_usage,
+        "metadata": metadata,
     }
 
     if VERBOSE:
@@ -65,8 +68,9 @@ def track_event(
 
     queue.append(event)
 
+
 def handle_internal_error(e):
-    print('[LLMonitor] Error: ', e)
+    print("[LLMonitor] Error: ", e)
 
 
 def wrap(
@@ -86,8 +90,7 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
-            tags = kwargs.pop('tags', None)
-
+            tags = kwargs.pop("tags", None)
 
             track_event(
                 type,
@@ -97,9 +100,11 @@ def wrap(
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
                 user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
-                user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
+                user_props=user_props_ctx.get()
+                or user_props
+                or kwargs.pop("user_props", None),
                 tags=tags,
-                extra=parsed_input["extra"]
+                extra=parsed_input["extra"],
             )
         except Exception as e:
             handle_internal_error(e)
@@ -116,8 +121,7 @@ def wrap(
 
             # rethrow error
             raise e
-            
-        
+
         try:
             parsed_output = output_parser(output)
 
@@ -134,10 +138,8 @@ def wrap(
         except Exception as e:
             handle_internal_error(e)
 
-    
         run_ctx.reset(token)
         return output
-        
 
     async def async_wrapper(*args, **kwargs):
         output = None
@@ -146,7 +148,7 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
-            tags = kwargs.pop('tags', None)
+            tags = kwargs.pop("tags", None)
 
             track_event(
                 type,
@@ -156,9 +158,11 @@ def wrap(
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
                 user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
-                user_props=user_props_ctx.get() or user_props or kwargs.pop("user_props", None),
+                user_props=user_props_ctx.get()
+                or user_props
+                or kwargs.pop("user_props", None),
                 tags=tags,
-                extra=parsed_input["extra"]
+                extra=parsed_input["extra"],
             )
         except Exception as e:
             handle_internal_error(e)
@@ -194,7 +198,6 @@ def wrap(
 
         run_ctx.reset(token)
         return output
-
 
     return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
 
