@@ -11,6 +11,7 @@ from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
 from .users import user_ctx, user_props_ctx, identify
+from .tags import tags_ctx, tags
 
 run_ctx = ContextVar("run_ids", default=None)
 
@@ -90,7 +91,6 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
-            tags = kwargs.pop("tags", None)
 
             track_event(
                 type,
@@ -99,11 +99,11 @@ def wrap(
                 parent_run_id,
                 input=parsed_input["input"],
                 name=name or parsed_input["name"],
-                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
-                user_props=user_props_ctx.get()
+                user_id=kwargs.pop("user_id", None) or user_ctx.get() or user_id,
+                user_props=kwargs.pop("user_props", None)
                 or user_props
-                or kwargs.pop("user_props", None),
-                tags=tags,
+                or user_props_ctx.get(),
+                tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                 extra=parsed_input["extra"],
             )
         except Exception as e:
