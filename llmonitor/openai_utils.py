@@ -1,4 +1,13 @@
-MONITORED_KEYS = ["temperature", "functions", "max_tokens", "frequency_penalty", "stop", "presence_penalty", "function_call"]
+MONITORED_KEYS = [
+    "temperature",
+    "functions",
+    "max_tokens",
+    "frequency_penalty",
+    "stop",
+    "presence_penalty",
+    "function_call",
+]
+
 
 class OpenAIUtils:
     @staticmethod
@@ -11,8 +20,8 @@ class OpenAIUtils:
     @staticmethod
     def parse_message(message):
         parsed_message = {
-            "role": OpenAIUtils.parse_role(message["role"]), 
-            "text": message["content"]
+            "role": OpenAIUtils.parse_role(message["role"]),
+            "text": message.get("content", None),
         }
         if "function_call" in message:
             parsed_message["functionCall"] = message["function_call"]
@@ -20,14 +29,16 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_input(*args, **kwargs):
-        messages = [OpenAIUtils.parse_message(message) for message in kwargs["messages"]]
-        name = kwargs.get('model', None) or kwargs.get('engine', None) or kwargs.get('deployment_id', None)
+        messages = [
+            OpenAIUtils.parse_message(message) for message in kwargs["messages"]
+        ]
+        name = (
+            kwargs.get("model", None)
+            or kwargs.get("engine", None)
+            or kwargs.get("deployment_id", None)
+        )
         extra = {key: kwargs[key] for key in MONITORED_KEYS if key in kwargs}
-        return {
-            "name": name,
-            "input": messages,
-            "extra": extra
-        }
+        return {"name": name, "input": messages, "extra": extra}
 
     @staticmethod
     def parse_output(output):
