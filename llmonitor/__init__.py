@@ -41,6 +41,12 @@ def track_event(
     APP_ID = os.environ.get("LLMONITOR_APP_ID")
     VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
 
+    if parent_run_id:
+        parent_run_id = str(parent_run_id)
+
+    if str(run_id) != str(run_ctx.get()):
+        parent_run_id = str(run_ctx.get())
+
     if not APP_ID:
         return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 
@@ -53,7 +59,7 @@ def track_event(
         "userProps": user_props,
         "tags": tags,
         "runId": str(run_id),
-        "parentRunId": str(parent_run_id) if parent_run_id else None,
+        "parentRunId": parent_run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "input": input,
         "output": output,
@@ -104,7 +110,7 @@ def wrap(
                 or user_props
                 or user_props_ctx.get(),
                 tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                extra=parsed_input["extra"],
+                extra=parsed_input.get("extra", None),
             )
         except Exception as e:
             handle_internal_error(e)
