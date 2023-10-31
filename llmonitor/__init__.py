@@ -22,7 +22,7 @@ consumer.start()
 
 
 def track_event(
-    event_type,
+    run_type,
     event_name,
     run_id,
     parent_run_id=None,
@@ -52,7 +52,7 @@ def track_event(
 
     event = {
         "event": event_name,
-        "type": event_type,
+        "type": run_type,
         "app": APP_ID,
         "name": name,
         "userId": user_id,
