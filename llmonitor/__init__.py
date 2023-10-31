@@ -44,7 +44,7 @@ def track_event(
     if parent_run_id:
         parent_run_id = str(parent_run_id)
 
-    if str(run_id) != str(run_ctx.get()):
+    if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
         parent_run_id = str(run_ctx.get())
 
     if not APP_ID:
