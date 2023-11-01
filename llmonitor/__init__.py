@@ -129,7 +129,7 @@ def wrap(
             raise e
 
         try:
-            parsed_output = output_parser(output)
+            parsed_output = output_parser(output, kwargs.get("stream", False))
 
             track_event(
                 type,
@@ -187,7 +187,7 @@ def wrap(
             raise e
 
         try:
-            parsed_output = output_parser(output)
+            parsed_output = output_parser(output, kwargs.get("stream", None))
 
             track_event(
                 type,

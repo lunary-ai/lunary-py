@@ -41,10 +41,29 @@ class OpenAIUtils:
         return {"name": name, "input": messages, "extra": extra}
 
     @staticmethod
-    def parse_output(output):
+    def parse_output(output, stream=False):
         try:
-            message = output.choices[0].message
+            if stream:
+                message = []
+                role = None
+                first_chunk_parsed = False
+                parsed_output = None
+                for chunk in output:
+                    chunk_message = chunk["choices"][0]["delta"].get("content", "")
+                    message.append(chunk_message)
+                    if first_chunk_parsed == False:
+                        role = chunk["choices"][0]["delta"]["role"]
+                        parsed_output = chunk
+                        first_chunk_parsed = True
 
+                parsed_output["choices"][0]["message"] = {
+                    "role": OpenAIUtils.parse_role(role),
+                    "text": "".join(message),
+                }
+                print(parsed_output)
+                return {"output": parsed_output.choices[0].message, "tokensUsage": None}
+
+            message = output.choices[0].message
             return {
                 "output": OpenAIUtils.parse_message(message),
                 "tokensUsage": {
