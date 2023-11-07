@@ -210,19 +210,31 @@ def wrap(
 
 def monitor(object: OpenAIUtils):
     if object.__name__ == "openai":
-        object.ChatCompletion.create = wrap(
-            object.ChatCompletion.create,
-            "llm",
-            input_parser=OpenAIUtils.parse_input,
-            output_parser=OpenAIUtils.parse_output,
-        )
+        # v1
+        if getattr(object, "chat", None):
+            object.chat.completions.create = wrap(
+                object.chat.completions.create,
+                "llm",
+                input_parser=OpenAIUtils.parse_input,
+                output_parser=OpenAIUtils.parse_output,
+            )
+            # TODO: async
 
-        object.ChatCompletion.acreate = wrap(
-            object.ChatCompletion.acreate,
-            "llm",
-            input_parser=OpenAIUtils.parse_input,
-            output_parser=OpenAIUtils.parse_output,
-        )
+        # v0
+        if getattr(object, "ChatCompletion", None):
+            object.ChatCompletion.create = wrap(
+                object.ChatCompletion.create,
+                "llm",
+                input_parser=OpenAIUtils.parse_input,
+                output_parser=OpenAIUtils.parse_output,
+            )
+
+            object.ChatCompletion.acreate = wrap(
+                object.ChatCompletion.acreate,
+                "llm",
+                input_parser=OpenAIUtils.parse_input,
+                output_parser=OpenAIUtils.parse_output,
+            )
 
     else:
         warnings.warn("You cannot monitor this object")

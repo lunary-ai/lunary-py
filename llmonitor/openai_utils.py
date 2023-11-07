@@ -1,3 +1,5 @@
+import logging
+
 MONITORED_KEYS = [
     "temperature",
     "functions",
@@ -18,13 +20,19 @@ class OpenAIUtils:
             return role
 
     @staticmethod
+    def get_property(message, property):
+        if isinstance(message, dict):
+            return message.get(property)
+        else:
+            return getattr(message, property, None)
+
+    @staticmethod
     def parse_message(message):
         parsed_message = {
-            "role": OpenAIUtils.parse_role(message["role"]),
-            "text": message.get("content", None),
+            "role": OpenAIUtils.get_property(message, "role"),
+            "text": OpenAIUtils.get_property(message, "content"),
+            "function_call": OpenAIUtils.get_property(message, "function_call"),
         }
-        if "function_call" in message:
-            parsed_message["functionCall"] = message["function_call"]
         return parsed_message
 
     @staticmethod
@@ -43,33 +51,31 @@ class OpenAIUtils:
     @staticmethod
     def parse_output(output, stream=False):
         try:
-            if stream:
-                message = []
-                role = None
-                first_chunk_parsed = False
-                parsed_output = None
-                for chunk in output:
-                    chunk_message = chunk["choices"][0]["delta"].get("content", "")
-                    message.append(chunk_message)
-                    if first_chunk_parsed == False:
-                        role = chunk["choices"][0]["delta"]["role"]
-                        parsed_output = chunk
-                        first_chunk_parsed = True
+            # if stream:
+            #     message = []
+            #     role = None
+            #     first_chunk_parsed = False
+            #     parsed_output = None
+            #     for chunk in output:
+            #         chunk_message = chunk["choices"][0]["delta"].get("content", "")
+            #         message.append(chunk_message)
+            #         if first_chunk_parsed == False:
+            #             role = chunk["choices"][0]["delta"]["role"]
+            #             parsed_output = chunk
+            #             first_chunk_parsed = True
 
-                parsed_output["choices"][0]["message"] = {
-                    "role": OpenAIUtils.parse_role(role),
-                    "text": "".join(message),
-                }
-                print(parsed_output)
-                return {"output": parsed_output.choices[0].message, "tokensUsage": None}
+            #     parsed_output["choices"][0]["message"] = {
+            #         "role": OpenAIUtils.parse_role(role),
+            #         "text": "".join(message),
+            #     }
+            #     return {"output": parsed_output.choices[0].message, "tokensUsage": None}
 
-            message = output.choices[0].message
             return {
-                "output": OpenAIUtils.parse_message(message),
+                "output": OpenAIUtils.parse_message(output.choices[0].message),
                 "tokensUsage": {
                     "completion": output.usage.completion_tokens,
                     "prompt": output.usage.prompt_tokens,
                 },
             }
         except Exception as e:
-            print("[LLMonitor] Error parsing output: ", e)
+            logging.exception("[LLMonitor] Error parsing output: ", e)
