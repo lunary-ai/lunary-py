@@ -1,6 +1,6 @@
 import asyncio, uuid, os, warnings
+from pkg_resources import parse_version
 import importlib
-from packaging.version import parse
 import traceback
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -281,10 +281,10 @@ def async_wrap(
 
 def monitor(object):
     try:
-        version = importlib.metadata.version("openai")
+        version = parse_version(importlib.metadata.version("openai"))
         name = getattr(object, "__name__", getattr(type(object), "__name__", None))
 
-        if parse(version) >= parse("1.0.0") and parse(version) <= parse("2.0.0"):
+        if version >= parse_version("1.0.0") and version < parse_version("2.0.0"):
             print("v1")
             if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
                 try:
@@ -306,7 +306,7 @@ def monitor(object):
                     input_parser=OpenAIUtils.parse_input,
                     output_parser=OpenAIUtils.parse_output,
                 )
-        elif parse(version) < parse("1.0.0"):
+        elif version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
                 object.ChatCompletion.create,
                 "llm",
