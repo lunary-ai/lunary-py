@@ -1,11 +1,19 @@
 MONITORED_KEYS = [
-    "temperature",
-    "functions",
-    "max_tokens",
     "frequency_penalty",
-    "stop",
-    "presence_penalty",
     "function_call",
+    "functions",
+    "logit_bias",
+    "max_tokens",
+    "n",
+    "present_penalty",
+    "response_format",
+    "seed",
+    "stop",
+    "stream",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_p",
 ]
 
 
