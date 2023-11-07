@@ -12,8 +12,8 @@ from .parsers import (
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
-from .users import user_ctx, user_props_ctx, identify
-from .tags import tags_ctx, tags
+from .users import user_ctx, user_props_ctx
+from .tags import tags_ctx
 
 run_ctx = ContextVar("run_ids", default=None)
 
@@ -38,19 +38,20 @@ def track_event(
     tags=None,
     extra=None,
     metadata=None,
+    app_id=None,
 ):
     # Load here in case load_dotenv done after
-    APP_ID = os.environ.get("LLMONITOR_APP_ID")
+    APP_ID = app_id or os.environ.get("LLMONITOR_APP_ID")
     VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
+
+    if not APP_ID:
+        return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 
     if parent_run_id:
         parent_run_id = str(parent_run_id)
 
     if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
         parent_run_id = str(run_ctx.get())
-
-    if not APP_ID:
-        return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
 
     event = {
         "event": event_name,
