@@ -69,7 +69,6 @@ class OpenAIUtils:
             #     }
             #     return {"output": parsed_output.choices[0].message, "tokensUsage": None}
 
-            print(output)
             return {
                 "output": OpenAIUtils.parse_message(output.choices[0].message),
                 "tokensUsage": {
