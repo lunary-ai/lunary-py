@@ -1,4 +1,6 @@
 import asyncio, uuid, os, warnings
+import importlib
+from packaging.version import parse
 import traceback
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -154,7 +156,6 @@ def wrap(
             run_id = uuid.uuid4()
             token = run_ctx.set(run_id)
             parsed_input = input_parser(*args, **kwargs)
-            tags = kwargs.pop("tags", None)
 
             track_event(
                 type,
@@ -208,20 +209,104 @@ def wrap(
     return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
 
 
-def monitor(object: OpenAIUtils):
-    if object.__name__ == "openai":
-        # v1
-        if getattr(object, "chat", None):
-            object.chat.completions.create = wrap(
-                object.chat.completions.create,
-                "llm",
-                input_parser=OpenAIUtils.parse_input,
-                output_parser=OpenAIUtils.parse_output,
-            )
-            # TODO: async
+def async_wrap(
+    fn,
+    type=None,
+    name=None,
+    user_id=None,
+    user_props=None,
+    tags=None,
+    input_parser=default_input_parser,
+    output_parser=default_output_parser,
+):
+    async def async_wrapper(*args, **kwargs):
+        output = None
+        try:
+            parent_run_id = run_ctx.get()
+            run_id = uuid.uuid4()
+            token = run_ctx.set(run_id)
+            parsed_input = input_parser(*args, **kwargs)
 
-        # v0
-        if getattr(object, "ChatCompletion", None):
+            track_event(
+                type,
+                "start",
+                run_id,
+                parent_run_id,
+                input=parsed_input["input"],
+                name=name or parsed_input["name"],
+                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
+                user_props=user_props_ctx.get()
+                or user_props
+                or kwargs.pop("user_props", None),
+                tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                extra=parsed_input["extra"],
+            )
+        except Exception as e:
+            handle_internal_error(e)
+
+        try:
+            output = await fn(*args, **kwargs)
+        except Exception as e:
+            track_event(
+                type,
+                "error",
+                run_id,
+                error={"message": str(e), "stack": traceback.format_exc()},
+            )
+
+            # rethrow error
+            raise e
+
+        try:
+            parsed_output = output_parser(output, kwargs.get("stream", None))
+
+            track_event(
+                type,
+                "end",
+                run_id,
+                # Need name in case need to compute tokens usage server side,
+                name=name or parsed_input["name"],
+                output=parsed_output["output"],
+                token_usage=parsed_output["tokensUsage"],
+            )
+            return output
+        except Exception as e:
+            handle_internal_error(e)
+
+        run_ctx.reset(token)
+        return output
+
+    return async_wrapper
+
+
+def monitor(object):
+    try:
+        version = importlib.metadata.version("openai")
+        name = getattr(object, "__name__", getattr(type(object), "__name__", None))
+
+        if parse(version) >= parse("1.0.0") and parse(version) <= parse("2.0.0"):
+            print("v1")
+            if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
+                try:
+                    object.chat.completions.create = wrap(
+                        object.chat.completions.create,
+                        "llm",
+                        input_parser=OpenAIUtils.parse_input,
+                        output_parser=OpenAIUtils.parse_output,
+                    )
+                except Exception as e:
+                    print(
+                        "[LLMonitor] Please use `monitor(openai)` or `monitor(client)` after setting the OpenAI api key"
+                    )
+
+            elif name == "AsyncOpenAI":
+                object.chat.completions.create = async_wrap(
+                    object.chat.completions.create,
+                    "llm",
+                    input_parser=OpenAIUtils.parse_input,
+                    output_parser=OpenAIUtils.parse_output,
+                )
+        elif parse(version) < parse("1.0.0"):
             object.ChatCompletion.create = wrap(
                 object.ChatCompletion.create,
                 "llm",
@@ -236,8 +321,8 @@ def monitor(object: OpenAIUtils):
                 output_parser=OpenAIUtils.parse_output,
             )
 
-    else:
-        warnings.warn("You cannot monitor this object")
+    except importlib.metadata.PackageNotFoundError:
+        print("[LLMonitor] The `openai` package is not installed")
 
 
 def agent(name=None, user_id=None, user_props=None, tags=None):

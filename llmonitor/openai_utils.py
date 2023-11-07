@@ -1,5 +1,3 @@
-import logging
-
 MONITORED_KEYS = [
     "temperature",
     "functions",
@@ -40,6 +38,7 @@ class OpenAIUtils:
         messages = [
             OpenAIUtils.parse_message(message) for message in kwargs["messages"]
         ]
+        print(messages)
         name = (
             kwargs.get("model", None)
             or kwargs.get("engine", None)
@@ -70,6 +69,7 @@ class OpenAIUtils:
             #     }
             #     return {"output": parsed_output.choices[0].message, "tokensUsage": None}
 
+            print(output)
             return {
                 "output": OpenAIUtils.parse_message(output.choices[0].message),
                 "tokensUsage": {
@@ -78,4 +78,4 @@ class OpenAIUtils:
                 },
             }
         except Exception as e:
-            logging.exception("[LLMonitor] Error parsing output: ", e)
+            print("[LLMonitor] Error parsing output: ", e)
