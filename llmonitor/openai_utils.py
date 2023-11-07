@@ -38,7 +38,6 @@ class OpenAIUtils:
         messages = [
             OpenAIUtils.parse_message(message) for message in kwargs["messages"]
         ]
-        print(messages)
         name = (
             kwargs.get("model", None)
             or kwargs.get("engine", None)
