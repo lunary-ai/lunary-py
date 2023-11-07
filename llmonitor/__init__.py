@@ -285,7 +285,6 @@ def monitor(object):
         name = getattr(object, "__name__", getattr(type(object), "__name__", None))
 
         if version >= parse_version("1.0.0") and version < parse_version("2.0.0"):
-            print("v1")
             if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
                 try:
                     object.chat.completions.create = wrap(
