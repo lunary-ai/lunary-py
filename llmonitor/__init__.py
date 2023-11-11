@@ -1,9 +1,10 @@
 import asyncio, uuid, os, warnings
 from pkg_resources import parse_version
-import importlib
+from importlib.metadata import version, PackageNotFoundError
 import traceback
 from contextvars import ContextVar
 from datetime import datetime, timezone
+
 
 from .parsers import (
     default_input_parser,
@@ -117,6 +118,69 @@ def wrap(
             )
         except Exception as e:
             handle_internal_error(e)
+
+        if kwargs.get("stream", True):
+            stream = fn(*args, **kwargs)
+            original_iterator = iter(stream)
+
+            def wrapped_iterator():
+                choices = []
+                tokens = 0
+
+                for chunk in original_iterator:
+                    tokens += 1
+                    choice = chunk.choices[0]
+                    index = choice.index
+
+                    content = choice.delta.content
+                    role = choice.delta.role
+                    function_call = choice.delta.function_call
+
+                    if len(choices) <= index:
+                        choices.append(
+                            {
+                                "message": {
+                                    "role": role,
+                                    "content": content,
+                                    "function_call": {},
+                                }
+                            }
+                        )
+
+                    if content:
+                        choices[index]["message"]["content"] += content
+
+                    if role:
+                        choices[index]["message"]["role"] = role
+
+                    if hasattr(function_call, "name"):
+                        choices[index]["message"]["function_call"][
+                            "name"
+                        ] = function_call.name
+
+                    if hasattr(function_call, "arguments"):
+                        choices[index]["message"]["function_call"].setdefault(
+                            "arguments", ""
+                        )
+                        choices[index]["message"]["function_call"][
+                            "arguments"
+                        ] += function_call.arguments
+
+                output = OpenAIUtils.parse_message(choices[0]["message"])
+
+                # TODO: add error handling
+                track_event(
+                    type,
+                    "end",
+                    run_id,
+                    name=name or parsed_input["name"],
+                    output=output,
+                    token_usage=None,
+                )
+
+                yield chunk
+
+            return (item for item in wrapped_iterator())
 
         try:
             output = fn(*args, **kwargs)
@@ -282,10 +346,12 @@ def async_wrap(
 
 def monitor(object):
     try:
-        version = parse_version(importlib.metadata.version("openai"))
+        openai_version = parse_version(version("openai"))
         name = getattr(object, "__name__", getattr(type(object), "__name__", None))
 
-        if version >= parse_version("1.0.0") and version < parse_version("2.0.0"):
+        if openai_version >= parse_version("1.0.0") and openai_version < parse_version(
+            "2.0.0"
+        ):
             if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
                 try:
                     object.chat.completions.create = wrap(
@@ -306,7 +372,7 @@ def monitor(object):
                     input_parser=OpenAIUtils.parse_input,
                     output_parser=OpenAIUtils.parse_output,
                 )
-        elif version < parse_version("1.0.0"):
+        elif openai_version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
                 object.ChatCompletion.create,
                 "llm",
@@ -321,7 +387,7 @@ def monitor(object):
                 output_parser=OpenAIUtils.parse_output,
             )
 
-    except importlib.metadata.PackageNotFoundError:
+    except PackageNotFoundError:
         print("[LLMonitor] The `openai` package is not installed")
 
 
