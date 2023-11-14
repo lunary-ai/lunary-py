@@ -352,6 +352,7 @@ def monitor(object):
         if openai_version >= parse_version("1.0.0") and openai_version < parse_version(
             "2.0.0"
         ):
+            name = getattr(type(object), "__name__", None)
             if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
                 try:
                     object.chat.completions.create = wrap(
@@ -371,6 +372,10 @@ def monitor(object):
                     "llm",
                     input_parser=OpenAIUtils.parse_input,
                     output_parser=OpenAIUtils.parse_output,
+                )
+            else:
+                print(
+                    "[LLMonitor] Uknonwn OpenAI client. You can only use `monitor(openai)` or `monitor(client)`"
                 )
         elif openai_version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
