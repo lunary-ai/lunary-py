@@ -26,11 +26,11 @@ class OpenAIUtils:
             return role
 
     @staticmethod
-    def get_property(message, property):
-        if isinstance(message, dict):
-            return message.get(property)
+    def get_property(object, property):
+        if isinstance(object, dict):
+            return None if not object.get(property) else object.get(property)
         else:
-            return getattr(message, property, None)
+            return getattr(object, property, None)
 
     @staticmethod
     def parse_message(message):

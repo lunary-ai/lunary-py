@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llmonitor"
-version = "0.0.34"
+version = "0.0.35"
 description = "Observability and monitoring for AI apps"
 authors = ["llmonitor <hello@llmonitor.com>"]
 readme = "README.md"
@@ -15,9 +15,10 @@ keywords = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8.0"
+python = "^3.8.1"
 requests = "^2.31.0"
 setuptools = "^68.2.2"
+tenacity = "^8.2.3"
 
 [build-system]
 requires = ["poetry-core"]
