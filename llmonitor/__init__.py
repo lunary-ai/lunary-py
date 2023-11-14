@@ -119,7 +119,7 @@ def wrap(
         except Exception as e:
             handle_internal_error(e)
 
-        if kwargs.get("stream", True):
+        if kwargs.get("stream") == True:
             stream = fn(*args, **kwargs)
             original_iterator = iter(stream)
 
