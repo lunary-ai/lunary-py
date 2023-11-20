@@ -14,7 +14,7 @@ from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
 from .users import user_ctx, user_props_ctx
-from .tags import tags_ctx
+from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 
 run_ctx = ContextVar("run_ids", default=None)
 
@@ -61,7 +61,7 @@ def track_event(
         "name": name,
         "userId": user_id,
         "userProps": user_props,
-        "tags": tags,
+        "tags": tags or tags_ctx.get(),
         "runId": str(run_id),
         "parentRunId": parent_run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -401,6 +401,21 @@ def agent(name=None, user_id=None, user_props=None, tags=None):
         return wrap(
             fn,
             "agent",
+            name=name or fn.__name__,
+            user_id=user_id,
+            user_props=user_props,
+            tags=tags,
+            input_parser=default_input_parser,
+        )
+
+    return decorator
+
+
+def chain(name=None, user_id=None, user_props=None, tags=None):
+    def decorator(fn):
+        return wrap(
+            fn,
+            "chain",
             name=name or fn.__name__,
             user_id=user_id,
             user_props=user_props,
