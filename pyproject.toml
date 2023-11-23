@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "llmonitor"
-version = "0.0.40"
+version = "0.1.0-beta.4"
 description = "Observability and monitoring for AI apps"
 authors = ["llmonitor <hello@llmonitor.com>"]
 readme = "README.md"
@@ -8,10 +8,13 @@ repository = "https://github.com/llmonitor/llmonitor-py/"
 documentation = "https://llmonitor.com/docs/py/usage"
 keywords = [
     "LLMonitor",
+    "OpenAI",
+    "OpenTelemetry",
     "Langchain",
     "AI",
     "Analytics",
-    "Monitoring"
+    "Monitoring",
+    "Observability",
 ]
 
 [tool.poetry.dependencies]
@@ -19,6 +22,8 @@ python = "^3.8.1"
 requests = "^2.31.0"
 setuptools = "^68.2.2"
 tenacity = "^8.2.3"
+opentelemetry-api = "^1.21.0"
+opentelemetry-sdk = "^1.21.0"
 
 [build-system]
 requires = ["poetry-core"]

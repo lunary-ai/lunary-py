@@ -11,7 +11,7 @@ class EventQueue:
             self.events.append(event)
 
     def get_batch(self):
-        if self.lock.acquire(False): # non-blocking
+        if self.lock.acquire(False):  # non-blocking
             try:
                 events = self.events
                 self.events = []
