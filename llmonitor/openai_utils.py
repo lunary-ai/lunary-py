@@ -1,3 +1,5 @@
+import json
+
 MONITORED_KEYS = [
     "frequency_penalty",
     "function_call",
@@ -13,6 +15,7 @@ MONITORED_KEYS = [
     "temperature",
     "tool_choice",
     "tools",
+    "tool_calls",
     "top_p",
 ]
 
@@ -34,10 +37,18 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_message(message):
+        tool_calls = OpenAIUtils.get_property(message, "tool_calls")
+
+        if tool_calls is not None:
+            tool_calls_serialized = [json.loads(tool_call.model_dump_json(indent=2, exclude_unset=True)) for tool_call in tool_calls]
+            print(tool_calls_serialized)
+            tool_calls = tool_calls_serialized
+
         parsed_message = {
             "role": OpenAIUtils.get_property(message, "role"),
             "text": OpenAIUtils.get_property(message, "content"),
             "function_call": OpenAIUtils.get_property(message, "function_call"),
+            "tool_calls": tool_calls 
         }
         return parsed_message
 
@@ -57,25 +68,6 @@ class OpenAIUtils:
     @staticmethod
     def parse_output(output, stream=False):
         try:
-            # if stream:
-            #     message = []
-            #     role = None
-            #     first_chunk_parsed = False
-            #     parsed_output = None
-            #     for chunk in output:
-            #         chunk_message = chunk["choices"][0]["delta"].get("content", "")
-            #         message.append(chunk_message)
-            #         if first_chunk_parsed == False:
-            #             role = chunk["choices"][0]["delta"]["role"]
-            #             parsed_output = chunk
-            #             first_chunk_parsed = True
-
-            #     parsed_output["choices"][0]["message"] = {
-            #         "role": OpenAIUtils.parse_role(role),
-            #         "text": "".join(message),
-            #     }
-            #     return {"output": parsed_output.choices[0].message, "tokensUsage": None}
-
             return {
                 "output": OpenAIUtils.parse_message(output.choices[0].message),
                 "tokensUsage": {

@@ -24,6 +24,14 @@ consumer = Consumer(queue)
 consumer.start()
 
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+
+provider = TracerProvider()
+trace.set_tracer_provider(provider)
+tracer = trace.get_tracer("llmonitor")
+
+
 def track_event(
     run_type,
     event_name,
@@ -76,12 +84,95 @@ def track_event(
 
     if VERBOSE:
         print("llmonitor_add_event", event)
+        print("\n")
 
     queue.append(event)
 
 
 def handle_internal_error(e):
     print("[LLMonitor] Error: ", e)
+
+
+def stream_handler(fn, run_id, name, type, *args, **kwargs):
+    stream = fn(*args, **kwargs)
+
+    choices = []
+    tokens = 0
+
+    for chunk in stream:
+        tokens += 1
+        choice = chunk.choices[0]
+        index = choice.index
+
+        content = choice.delta.content
+        role = choice.delta.role
+        function_call = choice.delta.function_call
+        tool_calls = choice.delta.tool_calls
+
+        if len(choices) <= index:
+            choices.append(
+                {
+                    "message": {
+                        "role": role,
+                        "content": content,
+                        "function_call": {},
+                        "tool_call": [],
+                    }
+                }
+            )
+
+        if content:
+            choices[index]["message"]["content"] += content
+
+        if role:
+            choices[index]["message"]["role"] = role
+
+        if hasattr(function_call, "name"):
+            choices[index]["message"]["function_call"]["name"] = function_call.name
+
+        if hasattr(function_call, "arguments"):
+            choices[index]["message"]["function_call"].setdefault("arguments", "")
+            choices[index]["message"]["function_call"][
+                "arguments"
+            ] += function_call.arguments
+
+        if isinstance(tool_calls, list):
+            for tool_call in tool_calls:
+                existing_call_index = next(
+                    (
+                        index
+                        for (index, tc) in enumerate(
+                            choices[index]["message"]["tool_calls"]
+                        )
+                        if tc["index"] == tool_call["index"]
+                    ),
+                    -1,
+                )
+
+            if existing_call_index == -1:
+                choices[index]["message"]["tool_calls"].append(tool_call)
+
+            else:
+                existing_call = choices[index]["message"]["tool_calls"][
+                    existing_call_index
+                ]
+                if "function" in tool_call and "arguments" in tool_call["function"]:
+                    existing_call["function"]["arguments"] += tool_call["function"][
+                        "arguments"
+                    ]
+
+        yield chunk
+
+    output = OpenAIUtils.parse_message(choices[0]["message"])
+    track_event(
+        type,
+        "end",
+        run_id,
+        name=name,
+        output=output,
+        token_usage={"completion": tokens, "prompt": None},
+    )
+    return
 
 
 def wrap(
@@ -95,183 +186,131 @@ def wrap(
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
-        output = None
-        try:
-            parent_run_id = run_ctx.get()
-            run_id = uuid.uuid4()
-            token = run_ctx.set(run_id)
-            parsed_input = input_parser(*args, **kwargs)
+        with tracer.start_as_current_span(uuid.uuid4()) as run:
+            output = None
+            try:
+                run_id = trace.get_current_span().context.span_id
+                parent_run_id = getattr(
+                    trace.get_current_span().parent, "span_id", None
+                )
+                parsed_input = input_parser(*args, **kwargs)
 
-            track_event(
-                type,
-                "start",
-                run_id,
-                parent_run_id,
-                input=parsed_input["input"],
-                name=name or parsed_input["name"],
-                user_id=kwargs.pop("user_id", None) or user_ctx.get() or user_id,
-                user_props=kwargs.pop("user_props", None)
-                or user_props
-                or user_props_ctx.get(),
-                tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                extra=parsed_input.get("extra", None),
-            )
-        except Exception as e:
-            handle_internal_error(e)
+                track_event(
+                    type,
+                    "start",
+                    run_id,
+                    parent_run_id,
+                    input=parsed_input["input"],
+                    name=name or parsed_input["name"],
+                    user_id=kwargs.pop("user_id", None) or user_ctx.get() or user_id,
+                    user_props=kwargs.pop("user_props", None)
+                    or user_props
+                    or user_props_ctx.get(),
+                    tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                    extra=parsed_input.get("extra", None),
+                )
+            except Exception as e:
+                handle_internal_error(e)
 
-        if kwargs.get("stream") == True:
-            stream = fn(*args, **kwargs)
-            original_iterator = iter(stream)
+            if kwargs.get("stream") == True:
+                return stream_handler(
+                    fn, run_id, name or parsed_input["name"], type, *args, **kwargs
+                )
 
-            def wrapped_iterator():
-                choices = []
-                tokens = 0
+            try:
+                output = fn(*args, **kwargs)
 
-                for chunk in original_iterator:
-                    tokens += 1
-                    choice = chunk.choices[0]
-                    index = choice.index
+            except Exception as e:
+                track_event(
+                    type,
+                    "error",
+                    run_id,
+                    error={"message": str(e), "stack": traceback.format_exc()},
+                )
 
-                    content = choice.delta.content
-                    role = choice.delta.role
-                    function_call = choice.delta.function_call
+                # rethrow error
+                raise e
 
-                    if len(choices) <= index:
-                        choices.append(
-                            {
-                                "message": {
-                                    "role": role,
-                                    "content": content,
-                                    "function_call": {},
-                                }
-                            }
-                        )
+            try:
+                parsed_output = output_parser(output, kwargs.get("stream", False))
 
-                    if content:
-                        choices[index]["message"]["content"] += content
-
-                    if role:
-                        choices[index]["message"]["role"] = role
-
-                    if hasattr(function_call, "name"):
-                        choices[index]["message"]["function_call"][
-                            "name"
-                        ] = function_call.name
-
-                    if hasattr(function_call, "arguments"):
-                        choices[index]["message"]["function_call"].setdefault(
-                            "arguments", ""
-                        )
-                        choices[index]["message"]["function_call"][
-                            "arguments"
-                        ] += function_call.arguments
-
-                output = OpenAIUtils.parse_message(choices[0]["message"])
-
-                # TODO: add error handling
                 track_event(
                     type,
                     "end",
                     run_id,
-                    name=name or parsed_input["name"],
-                    output=output,
-                    token_usage=None,
+                    name=name
+                    or parsed_input[
+                        "name"
+                    ],  # Need name in case need to compute tokens usage server side
+                    output=parsed_output["output"],
+                    token_usage=parsed_output["tokensUsage"],
                 )
+                return output
+            except Exception as e:
+                handle_internal_error(e)
+            finally:
+                return output
 
-                yield chunk
+    return sync_wrapper
 
-            return (item for item in wrapped_iterator())
 
-        try:
-            output = fn(*args, **kwargs)
-        except Exception as e:
-            track_event(
-                type,
-                "error",
-                run_id,
-                error={"message": str(e), "stack": traceback.format_exc()},
-            )
+# async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
+#     stream = fn(*args, **kwargs)
 
-            # rethrow error
-            raise e
+#     choices = []
+#     tokens = 0
 
-        try:
-            parsed_output = output_parser(output, kwargs.get("stream", False))
+#     async for chunk in stream:
+#         tokens += 1
+#         choice = chunk.choices[0]
+#         index = choice.index
 
-            track_event(
-                type,
-                "end",
-                run_id,
-                # Need name in case need to compute tokens usage server side,
-                name=name or parsed_input["name"],
-                output=parsed_output["output"],
-                token_usage=parsed_output["tokensUsage"],
-            )
-            return output
-        except Exception as e:
-            handle_internal_error(e)
+#         content = choice.delta.content
+#         role = choice.delta.role
+#         function_call = choice.delta.function_call
 
-        run_ctx.reset(token)
-        return output
+#         if len(choices) <= index:
+#             choices.append(
+#                 {
+#                     "message": {
+#                         "role": role,
+#                         "content": content,
+#                         "function_call": {},
+#                     }
+#                 }
+#             )
 
-    async def async_wrapper(*args, **kwargs):
-        output = None
-        try:
-            parent_run_id = run_ctx.get()
-            run_id = uuid.uuid4()
-            token = run_ctx.set(run_id)
-            parsed_input = input_parser(*args, **kwargs)
+#         if content:
+#             choices[index]["message"]["content"] += content
 
-            track_event(
-                type,
-                "start",
-                run_id,
-                parent_run_id,
-                input=parsed_input["input"],
-                name=name or parsed_input["name"],
-                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
-                user_props=user_props_ctx.get()
-                or user_props
-                or kwargs.pop("user_props", None),
-                tags=tags,
-                extra=parsed_input["extra"],
-            )
-        except Exception as e:
-            handle_internal_error(e)
+#         if role:
+#             choices[index]["message"]["role"] = role
 
-        try:
-            output = await fn(*args, **kwargs)
-        except Exception as e:
-            track_event(
-                type,
-                "error",
-                run_id,
-                error={"message": str(e), "stack": traceback.format_exc()},
-            )
+#         if hasattr(function_call, "name"):
+#             choices[index]["message"]["function_call"][
+#                 "name"
+#             ] = function_call.name
 
-            # rethrow error
-            raise e
+#         if hasattr(function_call, "arguments"):
+#             choices[index]["message"]["function_call"].setdefault(
+#                 "arguments", ""
+#             )
+#             choices[index]["message"]["function_call"][
+#                 "arguments"
+#             ] += function_call.arguments
 
-        try:
-            parsed_output = output_parser(output, kwargs.get("stream", None))
+#         yield chunk
 
-            track_event(
-                type,
-                "end",
-                run_id,
-                # Need name in case need to compute tokens usage server side,
-                name=name or parsed_input["name"],
-                output=parsed_output["output"],
-                token_usage=parsed_output["tokensUsage"],
-            )
-            return output
-        except Exception as e:
-            handle_internal_error(e)
-
-        run_ctx.reset(token)
-        return output
-
-    return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
+#     output = OpenAIUtils.parse_message(choices[0]["message"])
+#     track_event(
+#         type,
+#         "end",
+#         run_id,
+#         name=name,
+#         output=output,
+#         token_usage={"completion": tokens, "prompt": None},
+#     )
+#     return
 
 
 def async_wrap(
@@ -285,61 +324,68 @@ def async_wrap(
     output_parser=default_output_parser,
 ):
     async def async_wrapper(*args, **kwargs):
-        output = None
-        try:
-            parent_run_id = run_ctx.get()
-            run_id = uuid.uuid4()
-            token = run_ctx.set(run_id)
-            parsed_input = input_parser(*args, **kwargs)
+        with tracer.start_as_current_span(uuid.uuid4()) as run:
+            output = None
+            try:
+                run_id = trace.get_current_span().context.span_id
+                parent_run_id = getattr(
+                    trace.get_current_span().parent, "span_id", None
+                )
+                parsed_input = input_parser(*args, **kwargs)
 
-            track_event(
-                type,
-                "start",
-                run_id,
-                parent_run_id,
-                input=parsed_input["input"],
-                name=name or parsed_input["name"],
-                user_id=user_ctx.get() or user_id or kwargs.pop("user_id", None),
-                user_props=user_props_ctx.get()
-                or user_props
-                or kwargs.pop("user_props", None),
-                tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                extra=parsed_input["extra"],
-            )
-        except Exception as e:
-            handle_internal_error(e)
+                track_event(
+                    type,
+                    "start",
+                    run_id,
+                    parent_run_id,
+                    input=parsed_input["input"],
+                    name=name or parsed_input["name"],
+                    user_id=kwargs.pop("user_id", None) or user_ctx.get() or user_id,
+                    user_props=kwargs.pop("user_props", None)
+                    or user_props
+                    or user_props_ctx.get(),
+                    tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                    extra=parsed_input.get("extra", None),
+                )
+            except Exception as e:
+                handle_internal_error(e)
 
-        try:
-            output = await fn(*args, **kwargs)
-        except Exception as e:
-            track_event(
-                type,
-                "error",
-                run_id,
-                error={"message": str(e), "stack": traceback.format_exc()},
-            )
+            # if kwargs.get("stream") == True:
+            # return await async_stream_handler(fn, run_id, name or parsed_input["name"], type, *args, **kwargs)
 
-            # rethrow error
-            raise e
+            try:
+                output = await fn(*args, **kwargs)
 
-        try:
-            parsed_output = output_parser(output, kwargs.get("stream", None))
+            except Exception as e:
+                track_event(
+                    type,
+                    "error",
+                    run_id,
+                    error={"message": str(e), "stack": traceback.format_exc()},
+                )
 
-            track_event(
-                type,
-                "end",
-                run_id,
-                # Need name in case need to compute tokens usage server side,
-                name=name or parsed_input["name"],
-                output=parsed_output["output"],
-                token_usage=parsed_output["tokensUsage"],
-            )
-            return output
-        except Exception as e:
-            handle_internal_error(e)
+                # rethrow error
+                raise e
 
-        run_ctx.reset(token)
-        return output
+            try:
+                parsed_output = output_parser(output, kwargs.get("stream", False))
+
+                track_event(
+                    type,
+                    "end",
+                    run_id,
+                    name=name
+                    or parsed_input[
+                        "name"
+                    ],  # Need name in case need to compute tokens usage server side
+                    output=parsed_output["output"],
+                    token_usage=parsed_output["tokensUsage"],
+                )
+                return output
+            except Exception as e:
+                handle_internal_error(e)
+            finally:
+                return output
 
     return async_wrapper
 
