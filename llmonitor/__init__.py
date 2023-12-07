@@ -1,4 +1,4 @@
-import asyncio, uuid, os, warnings
+import asyncio, json, uuid, os, warnings
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
 import traceback
@@ -116,7 +116,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                         "role": role,
                         "content": content,
                         "function_call": {},
-                        "tool_call": [],
+                        "tool_calls": [],
                     }
                 }
             )
@@ -144,7 +144,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                         for (index, tc) in enumerate(
                             choices[index]["message"]["tool_calls"]
                         )
-                        if tc["index"] == tool_call["index"]
+                        if tc.index == tool_call.index
                     ),
                     -1,
                 )
@@ -156,10 +156,8 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                 existing_call = choices[index]["message"]["tool_calls"][
                     existing_call_index
                 ]
-                if "function" in tool_call and "arguments" in tool_call["function"]:
-                    existing_call["function"]["arguments"] += tool_call["function"][
-                        "arguments"
-                    ]
+                if hasattr(tool_call, "function") and hasattr(tool_call.function, "arguments"):
+                    existing_call.function.arguments += tool_call.function.arguments
 
         yield chunk
 

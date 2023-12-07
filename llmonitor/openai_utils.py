@@ -41,7 +41,6 @@ class OpenAIUtils:
 
         if tool_calls is not None:
             tool_calls_serialized = [json.loads(tool_call.model_dump_json(indent=2, exclude_unset=True)) for tool_call in tool_calls]
-            print(tool_calls_serialized)
             tool_calls = tool_calls_serialized
 
         parsed_message = {
