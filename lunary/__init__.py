@@ -1,7 +1,6 @@
-import asyncio, json, uuid, os, warnings
+import uuid, os, warnings, traceback, logging
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
-import traceback
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
@@ -16,6 +15,8 @@ from .consumer import Consumer
 from .users import user_ctx, user_props_ctx
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 
+logger = logging.getLogger(__name__)
+
 run_ctx = ContextVar("run_ids", default=None)
 
 queue = EventQueue()
@@ -29,7 +30,7 @@ from opentelemetry.sdk.trace import TracerProvider
 
 provider = TracerProvider()
 trace.set_tracer_provider(provider)
-tracer = trace.get_tracer("llmonitor")
+tracer = trace.get_tracer("lunary")
 
 
 def track_event(
@@ -50,11 +51,13 @@ def track_event(
     app_id=None,
 ):
     # Load here in case load_dotenv done after
-    APP_ID = app_id or os.environ.get("LLMONITOR_APP_ID")
-    VERBOSE = os.environ.get("LLMONITOR_VERBOSE")
+    APP_ID = (
+        app_id or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+    )
+    VERBOSE = os.environ.get("LUNARY_VERBOSE") or os.environ.get("LLMONITOR_VERBOSE")
 
     if not APP_ID:
-        return warnings.warn("LLMONITOR_APP_ID is not set, not sending events")
+        return warnings.warn("LUNARY_APP_ID is not set, not sending events")
 
     if parent_run_id:
         parent_run_id = str(parent_run_id)
@@ -77,20 +80,20 @@ def track_event(
         "output": output,
         "error": error,
         "extra": extra,
-        "runtime": "llmonitor-py",
+        "runtime": "lunary-py",
         "tokensUsage": token_usage,
         "metadata": metadata,
     }
 
     if VERBOSE:
-        print("llmonitor_add_event", event)
+        print("[Lunary] Add event:", event)
         print("\n")
 
     queue.append(event)
 
 
 def handle_internal_error(e):
-    print("[LLMonitor] Error: ", e)
+    logging.info("[Lunary] Error: ", e)
 
 
 def stream_handler(fn, run_id, name, type, *args, **kwargs):
@@ -156,7 +159,9 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                 existing_call = choices[index]["message"]["tool_calls"][
                     existing_call_index
                 ]
-                if hasattr(tool_call, "function") and hasattr(tool_call.function, "arguments"):
+                if hasattr(tool_call, "function") and hasattr(
+                    tool_call.function, "arguments"
+                ):
                     existing_call.function.arguments += tool_call.function.arguments
 
         yield chunk
@@ -250,65 +255,6 @@ def wrap(
                 return output
 
     return sync_wrapper
-
-
-# async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
-#     stream = fn(*args, **kwargs)
-
-#     choices = []
-#     tokens = 0
-
-#     async for chunk in stream:
-#         tokens += 1
-#         choice = chunk.choices[0]
-#         index = choice.index
-
-#         content = choice.delta.content
-#         role = choice.delta.role
-#         function_call = choice.delta.function_call
-
-#         if len(choices) <= index:
-#             choices.append(
-#                 {
-#                     "message": {
-#                         "role": role,
-#                         "content": content,
-#                         "function_call": {},
-#                     }
-#                 }
-#             )
-
-#         if content:
-#             choices[index]["message"]["content"] += content
-
-#         if role:
-#             choices[index]["message"]["role"] = role
-
-#         if hasattr(function_call, "name"):
-#             choices[index]["message"]["function_call"][
-#                 "name"
-#             ] = function_call.name
-
-#         if hasattr(function_call, "arguments"):
-#             choices[index]["message"]["function_call"].setdefault(
-#                 "arguments", ""
-#             )
-#             choices[index]["message"]["function_call"][
-#                 "arguments"
-#             ] += function_call.arguments
-
-#         yield chunk
-
-#     output = OpenAIUtils.parse_message(choices[0]["message"])
-#     track_event(
-#         type,
-#         "end",
-#         run_id,
-#         name=name,
-#         output=output,
-#         token_usage={"completion": tokens, "prompt": None},
-#     )
-#     return
 
 
 def async_wrap(
@@ -406,8 +352,8 @@ def monitor(object):
                         output_parser=OpenAIUtils.parse_output,
                     )
                 except Exception as e:
-                    print(
-                        "[LLMonitor] Please use `monitor(openai)` or `monitor(client)` after setting the OpenAI api key"
+                    logging.info(
+                        "[Lunary] Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
                     )
 
             elif name == "AsyncOpenAI":
@@ -418,8 +364,8 @@ def monitor(object):
                     output_parser=OpenAIUtils.parse_output,
                 )
             else:
-                print(
-                    "[LLMonitor] Uknonwn OpenAI client. You can only use `monitor(openai)` or `monitor(client)`"
+                logging.info(
+                    "[Lunary] Uknonwn OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
                 )
         elif openai_version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
@@ -437,7 +383,7 @@ def monitor(object):
             )
 
     except PackageNotFoundError:
-        print("[LLMonitor] The `openai` package is not installed")
+        logging.info("[Lunary] The `openai` package is not installed")
 
 
 def agent(name=None, user_id=None, user_props=None, tags=None):

@@ -1,4 +1,6 @@
-import json
+import json, logging
+
+logger = logging.getLogger(__name__)
 
 MONITORED_KEYS = [
     "frequency_penalty",
@@ -40,14 +42,17 @@ class OpenAIUtils:
         tool_calls = OpenAIUtils.get_property(message, "tool_calls")
 
         if tool_calls is not None:
-            tool_calls_serialized = [json.loads(tool_call.model_dump_json(indent=2, exclude_unset=True)) for tool_call in tool_calls]
+            tool_calls_serialized = [
+                json.loads(tool_call.model_dump_json(indent=2, exclude_unset=True))
+                for tool_call in tool_calls
+            ]
             tool_calls = tool_calls_serialized
 
         parsed_message = {
             "role": OpenAIUtils.get_property(message, "role"),
             "text": OpenAIUtils.get_property(message, "content"),
             "function_call": OpenAIUtils.get_property(message, "function_call"),
-            "tool_calls": tool_calls 
+            "tool_calls": tool_calls,
         }
         return parsed_message
 
@@ -75,4 +80,4 @@ class OpenAIUtils:
                 },
             }
         except Exception as e:
-            print("[LLMonitor] Error parsing output: ", e)
+            logging.info("[Lunary] Error parsing output: ", e)
