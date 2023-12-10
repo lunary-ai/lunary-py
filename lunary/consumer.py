@@ -1,15 +1,25 @@
-import time, atexit, requests, os
+import time, atexit, requests, os, logging
 from threading import Thread
 
-DEFAULT_API_URL = "https://app.llmonitor.com"
+logger = logging.getLogger(__name__)
+
+DEFAULT_API_URL = "https://app.lunary.ai"
 
 
 class Consumer(Thread):
     def __init__(self, event_queue):
         self.running = True
         self.event_queue = event_queue
-        self.api_url = os.environ.get("LLMONITOR_API_URL") or DEFAULT_API_URL
-        self.verbose = os.environ.get("LLMONITOR_VERBOSE") or False
+        self.api_url = (
+            os.environ.get("LUNARY_API_URL")
+            or os.environ.get("LLMONITOR_API_URL")
+            or DEFAULT_API_URL
+        )
+        self.verbose = (
+            os.environ.get("LUNARY_VERBOSE")
+            or os.environ.get("LLMONITOR_VERBOSE")
+            or False
+        )
 
         Thread.__init__(self, daemon=True)
         atexit.register(self.stop)
@@ -26,11 +36,11 @@ class Consumer(Thread):
 
         if len(batch) > 0:
             if self.verbose:
-                print("llmonitor: sending events", len(batch))
+                logging.info(f"[Lunary] Sending {len(batch)} events.")
 
             try:
                 if self.verbose:
-                    print("llmonitor: sending events to ", self.api_url)
+                    logging.info("[Lunary] Sending events to ", self.api_url)
 
                 response = requests.post(
                     self.api_url + "/api/report",
@@ -40,13 +50,13 @@ class Consumer(Thread):
                 )
 
                 if self.verbose:
-                    print("llmonitor: events sent.", response.status_code)
+                    logging.info("[Lunary] Events sent.", response.status_code)
 
                 if response.status_code != 200:
-                    print("Error sending events")
+                    logging.info("[Lunary] Error sending events")
             except Exception as e:
                 if self.verbose:
-                    print("Error sending events", e)
+                    logging.info("[Lunary] Error sending events", e)
 
                 self.event_queue.append(batch)
 

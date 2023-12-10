@@ -1,14 +1,13 @@
-from llmonitor import monitor
-
 from dotenv import load_dotenv
 import openai
 import os
+import lunary
 
 load_dotenv()
 
-openai.api_key = os.environ.get('OPENAI_API_KEY')
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-monitor(openai)
+lunary.monitor(openai)
 
 functions = [
     {
@@ -29,10 +28,10 @@ functions = [
 ]
 
 completion = openai.ChatCompletion.create(
-    model="gpt-3.5-turbo", 
+    model="gpt-3.5-turbo",
     messages=[{"role": "user", "content": "What's the weather like in Boston?"}],
     temperature=0,
-    functions=functions
+    functions=functions,
 )
 
 print(completion.choices[0].message)
