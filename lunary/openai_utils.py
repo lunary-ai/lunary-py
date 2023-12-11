@@ -50,7 +50,7 @@ class OpenAIUtils:
 
         parsed_message = {
             "role": OpenAIUtils.get_property(message, "role"),
-            "text": OpenAIUtils.get_property(message, "content"),
+            "content": OpenAIUtils.get_property(message, "content"),
             "function_call": OpenAIUtils.get_property(message, "function_call"),
             "tool_calls": tool_calls,
         }
