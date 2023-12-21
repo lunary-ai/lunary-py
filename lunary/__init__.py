@@ -150,7 +150,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                 {
                     "message": {
                         "role": role,
-                        "content": content,
+                        "content": content or "",
                         "function_call": {},
                         "tool_calls": [],
                     }
@@ -756,7 +756,8 @@ try:
                 )
             except Exception as e:
                 warnings.warn(
-                    f"[LMonitor] An error occurred in on_llm_start: {e}\n{traceback.format_exc()}"
+                    f"""[LMonitor] An error occurred in on_llm_start: {
+                        e}\n{traceback.format_exc()}"""
                 )
 
         def on_chat_model_start(
