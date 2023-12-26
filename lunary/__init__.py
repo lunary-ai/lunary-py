@@ -7,6 +7,8 @@ import warnings
 import traceback
 import logging
 import json
+import time
+import chevron
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
@@ -25,6 +27,8 @@ from .consumer import Consumer
 from .users import user_ctx, user_props_ctx, identify
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 from .thread import Thread
+
+DEFAULT_API_URL = "https://app.lunary.ai"
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,7 @@ def track_event(
     thread_tags=None,
     feedback=None,
     extra=None,
+    template_id=None,
     metadata=None,
     app_id=None,
 ):
@@ -116,6 +121,7 @@ def track_event(
         "runtime": "lunary-py",
         "tokensUsage": token_usage,
         "metadata": metadata,
+        "templateId": template_id,
     }
 
     if VERBOSE:
@@ -246,6 +252,7 @@ def wrap(
                     or user_props_ctx.get(),
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                     extra=kwargs.get("extra", None),
+                    template_id=kwargs.pop("templateId", None),
                 )
             except Exception as e:
                 handle_internal_error(e)
@@ -327,6 +334,7 @@ def async_wrap(
                     or user_props_ctx.get(),
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                     extra=parsed_input.get("extra", None),
+                    template_id=kwargs.pop("templateId", None),
                 )
             except Exception as e:
                 handle_internal_error(e)
@@ -1144,3 +1152,56 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
         return
 
     track_event(None, "feedback", run_id=run_id, feedback=feedback)
+
+
+
+templateCache = {}
+
+def get_raw_template(slug="kind-angle"):
+    APP_ID = (
+        os.environ.get(
+            "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+    )
+    global templateCache
+    now = time.time() * 1000  
+    cache_entry = templateCache.get(slug)
+
+    if cache_entry and now - cache_entry['timestamp'] < 60000:
+        return cache_entry['data']
+
+    response = requests.get(f"{DEFAULT_API_URL}/api/v1/template?slug={slug}&app_id={APP_ID}", headers={"Content-Type": "application/json"})
+
+    if not response.ok:
+        raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
+
+    data = response.json()
+    templateCache[slug] = {'timestamp': now, 'data': data}
+    return data
+
+
+def render_template(slug, data={}):
+    try:
+        raw_template = get_raw_template(slug)
+        template_id = raw_template['id']
+        content = raw_template['content']
+        extra = raw_template['extra']
+
+        text_mode = isinstance(content, str)
+
+        result = None
+        if text_mode:
+            rendered = chevron.render(content, data)
+            result = {"text": rendered, "templateId": template_id, **extra}
+            return result
+        else:
+            messages = []
+            for message in content:
+                message["content"] = chevron.render(message["content"], data)
+                messages.append(message)
+            result = {"messages": messages, "templateId": template_id, **extra}
+
+            return result
+
+    except Exception as e:
+        print(e)
+
