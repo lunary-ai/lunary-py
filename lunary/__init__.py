@@ -217,6 +217,87 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
     )
     return
 
+async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
+    stream = await fn(*args, **kwargs)
+
+    choices = []
+    tokens = 0
+
+    async for chunk in stream:
+        tokens += 1
+        choice = chunk.choices[0]
+        index = choice.index
+
+        content = choice.delta.content
+        role = choice.delta.role
+        function_call = choice.delta.function_call
+        tool_calls = choice.delta.tool_calls
+
+        if len(choices) <= index:
+            choices.append(
+                {
+                    "message": {
+                        "role": role,
+                        "content": content or "",
+                        "function_call": {},
+                        "tool_calls": [],
+                    }
+                }
+            )
+
+        if content:
+            choices[index]["message"]["content"] += content
+
+        if role:
+            choices[index]["message"]["role"] = role
+
+        if hasattr(function_call, "name"):
+            choices[index]["message"]["function_call"]["name"] = function_call.name
+
+        if hasattr(function_call, "arguments"):
+            choices[index]["message"]["function_call"].setdefault(
+                "arguments", "")
+            choices[index]["message"]["function_call"][
+                "arguments"
+            ] += function_call.arguments
+
+        if isinstance(tool_calls, list):
+            for tool_call in tool_calls:
+                existing_call_index = next(
+                    (
+                        index
+                        for (index, tc) in enumerate(
+                        choices[index]["message"]["tool_calls"]
+                    )
+                        if tc.index == tool_call.index
+                    ),
+                    -1,
+                )
+
+            if existing_call_index == -1:
+                choices[index]["message"]["tool_calls"].append(tool_call)
+
+            else:
+                existing_call = choices[index]["message"]["tool_calls"][
+                    existing_call_index
+                ]
+                if hasattr(tool_call, "function") and hasattr(
+                        tool_call.function, "arguments"
+                ):
+                    existing_call.function.arguments += tool_call.function.arguments
+
+        yield chunk
+
+    output = OpenAIUtils.parse_message(choices[0]["message"])
+    track_event(
+        type,
+        "end",
+        run_id,
+        name=name,
+        output=output,
+        token_usage={"completion": tokens, "prompt": None},
+    )
+    return
 
 def wrap(
     fn,
@@ -310,74 +391,112 @@ def async_wrap(
     input_parser=default_input_parser,
     output_parser=default_output_parser,
 ):
-    async def async_wrapper(*args, **kwargs):
-        with tracer.start_as_current_span(uuid.uuid4()) as run:
-            output = None
-            try:
-                run_id = trace.get_current_span().context.span_id
-                parent_run_id = getattr(
-                    trace.get_current_span().parent, "span_id", None
-                )
-                parsed_input = input_parser(*args, **kwargs)
+    async def wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
+            with tracer.start_as_current_span(uuid.uuid4()) as run:
+                output = None
+                try:
+                    run_id = trace.get_current_span().context.span_id
+                    parent_run_id = getattr(
+                        trace.get_current_span().parent, "span_id", None
+                    )
+                    parsed_input = input_parser(*args, **kwargs)
 
-                track_event(
-                    type,
-                    "start",
-                    run_id,
-                    parent_run_id,
-                    input=parsed_input["input"],
-                    name=name or parsed_input["name"],
-                    user_id=kwargs.pop(
-                        "user_id", None) or user_ctx.get() or user_id,
-                    user_props=kwargs.pop("user_props", None)
-                    or user_props
-                    or user_props_ctx.get(),
-                    tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                    extra=parsed_input.get("extra", None),
-                    template_id=kwargs.pop("templateId", None),
-                )
-            except Exception as e:
-                handle_internal_error(e)
+                    track_event(
+                        type,
+                        "start",
+                        run_id,
+                        parent_run_id,
+                        input=parsed_input["input"],
+                        name=name or parsed_input["name"],
+                        user_id=kwargs.pop(
+                            "user_id", None
+                        ) or user_ctx.get() or user_id,
+                        user_props=kwargs.pop("user_props", None)
+                                   or user_props
+                                   or user_props_ctx.get(),
+                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                        extra=parsed_input.get("extra", None),
+                        template_id=kwargs.pop("templateId", None),
+                    )
+                except Exception as e:
+                    handle_internal_error(e)
 
-            # if kwargs.get("stream") == True:
-            # return await async_stream_handler(fn, run_id, name or parsed_input["name"], type, *args, **kwargs)
+                try:
+                    output = await fn(*args, **kwargs)
 
-            try:
-                output = await fn(*args, **kwargs)
+                except Exception as e:
+                    track_event(
+                        type,
+                        "error",
+                        run_id,
+                        error={"message": str(e), "stack": traceback.format_exc()},
+                    )
 
-            except Exception as e:
-                track_event(
-                    type,
-                    "error",
-                    run_id,
-                    error={"message": str(e), "stack": traceback.format_exc()},
-                )
+                    # rethrow error
+                    raise e
 
-                # rethrow error
-                raise e
+                try:
+                    parsed_output = output_parser(
+                        output, kwargs.get("stream", False)
+                    )
 
-            try:
-                parsed_output = output_parser(
-                    output, kwargs.get("stream", False))
+                    track_event(
+                        type,
+                        "end",
+                        run_id,
+                        name=name
+                             or parsed_input[
+                                 "name"
+                             ],  # Need name in case need to compute tokens usage server side
+                        output=parsed_output["output"],
+                        token_usage=parsed_output["tokensUsage"],
+                    )
+                    return output
+                except Exception as e:
+                    handle_internal_error(e)
+                finally:
+                    return output
 
-                track_event(
-                    type,
-                    "end",
-                    run_id,
-                    name=name
-                    or parsed_input[
-                        "name"
-                    ],  # Need name in case need to compute tokens usage server side
-                    output=parsed_output["output"],
-                    token_usage=parsed_output["tokensUsage"],
-                )
-                return output
-            except Exception as e:
-                handle_internal_error(e)
-            finally:
-                return output
+        def async_stream_wrapper(*args, **kwargs):
+            with tracer.start_as_current_span(uuid.uuid4()) as run:
+                output = None
+                try:
+                    run_id = trace.get_current_span().context.span_id
+                    parent_run_id = getattr(
+                        trace.get_current_span().parent, "span_id", None
+                    )
+                    parsed_input = input_parser(*args, **kwargs)
 
-    return async_wrapper
+                    track_event(
+                        type,
+                        "start",
+                        run_id,
+                        parent_run_id,
+                        input=parsed_input["input"],
+                        name=name or parsed_input["name"],
+                        user_id=kwargs.pop(
+                            "user_id", None
+                        ) or user_ctx.get() or user_id,
+                        user_props=kwargs.pop("user_props", None)
+                                   or user_props
+                                   or user_props_ctx.get(),
+                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                        extra=parsed_input.get("extra", None),
+                        template_id=kwargs.pop("templateId", None),
+                    )
+                except Exception as e:
+                    handle_internal_error(e)
+
+                return async_stream_handler(fn, run_id, name or parsed_input["name"], type, *args, **kwargs)
+
+        if kwargs.get("stream") == True:
+            return async_stream_wrapper(*args, **kwargs)
+
+        else:
+            return await async_wrapper(*args, **kwargs)
+
+    return wrapper
 
 
 def monitor(object):
@@ -1186,7 +1305,7 @@ try:
                 )
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_llm_error: {e}")
-                
+
 except Exception as e:
     print(e)
     print("[Lunary] Please install `langchain` to use LunaryCallbackHandler.")
@@ -1217,7 +1336,7 @@ def get_raw_template(slug="kind-angle"):
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     global templateCache
-    now = time.time() * 1000  
+    now = time.time() * 1000
     cache_entry = templateCache.get(slug)
 
     if cache_entry and now - cache_entry['timestamp'] < 60000:
