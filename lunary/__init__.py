@@ -1307,8 +1307,7 @@ try:
                 logger.error(f"[Lunary] An error occurred in on_llm_error: {e}")
 
 except Exception as e:
-    print(e)
-    print("[Lunary] Please install `langchain` to use LunaryCallbackHandler.")
+    pass
 
 
 def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):

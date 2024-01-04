@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lunary"
-version = "0.1.7"
+version = "0.1.10"
 description = "Observability, analytics and tests for AI agents and chatbots."
 authors = ["lunary <hello@lunary.ai>"]
 readme = "README.md"
@@ -18,7 +18,7 @@ keywords = [
 [tool.poetry.dependencies]
 python = "^3.8.1"
 requests = "^2.31.0"
-setuptools = "^69.0.2"
+setuptools = "^67.6.2"
 tenacity = "^8.2.3"
 opentelemetry-api = "^1.21.0"
 opentelemetry-sdk = "^1.21.0"
