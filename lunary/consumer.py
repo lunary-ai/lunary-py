@@ -1,4 +1,8 @@
-import time, atexit, requests, os, logging
+import time
+import atexit
+import requests
+import os
+import logging
 from threading import Thread
 
 logger = logging.getLogger(__name__)
@@ -53,10 +57,10 @@ class Consumer(Thread):
                     logging.info("[Lunary] Events sent.", response.status_code)
 
                 if response.status_code != 200:
-                    logging.info("[Lunary] Error sending events")
+                    logging.error("[Lunary] Error sending events")
             except Exception as e:
                 if self.verbose:
-                    logging.info("[Lunary] Error sending events", e)
+                    logging.error("[Lunary] Error sending events", e)
 
                 self.event_queue.append(batch)
 

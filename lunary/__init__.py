@@ -6,6 +6,7 @@ import os
 import warnings
 import traceback
 import logging
+import copy
 import json
 import time
 import chevron
@@ -1351,12 +1352,13 @@ def get_raw_template(slug="kind-angle"):
     return data
 
 
-def render_template(slug, data={}):
+def render_template(slug, data):
     try:
         raw_template = get_raw_template(slug)
-        template_id = raw_template['id']
-        content = raw_template['content']
-        extra = raw_template['extra']
+        template_id = copy.deepcopy(raw_template['id'])
+        content = copy.deepcopy(raw_template['content'])
+        extra = copy.deepcopy(raw_template['extra'])
+
 
         text_mode = isinstance(content, str)
 
@@ -1377,3 +1379,17 @@ def render_template(slug, data={}):
     except Exception as e:
         print(e)
 
+
+def get_dataset(dataset_id):
+    APP_ID = os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+
+    try:
+        url = f"{DEFAULT_API_URL}/v1/projects/{APP_ID}/datasets/{dataset_id}"
+        response = requests.get(url, headers={"Content-Type": "application/json"})
+
+        raise Exception("Error")
+        data = response.json()
+        return data['runs']
+
+    except Exception as e:
+        print("Lunary: Error fetching dataset: you must be on the Unlimited or Enterprise plan to use this feature.")
