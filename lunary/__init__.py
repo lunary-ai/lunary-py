@@ -920,6 +920,8 @@ try:
                     params.get("model")
                     or params.get("model_name")
                     or params.get("model_id")
+                    or params.get("deployment_name")
+                    or params.get("azure_deployment")
                 )
 
                 if not name and "anthropic" in params.get("_type"):
@@ -996,6 +998,8 @@ try:
                     params.get("model")
                     or params.get("model_name")
                     or params.get("model_id")
+                    or params.get("deployment_name")
+                    or params.get("azure_deployment")
                 )
 
                 if not name and "anthropic" in params.get("_type"):
