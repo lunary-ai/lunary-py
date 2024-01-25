@@ -218,6 +218,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
     )
     return
 
+
 async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
     stream = await fn(*args, **kwargs)
 
@@ -268,8 +269,8 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
                     (
                         index
                         for (index, tc) in enumerate(
-                        choices[index]["message"]["tool_calls"]
-                    )
+                            choices[index]["message"]["tool_calls"]
+                        )
                         if tc.index == tool_call.index
                     ),
                     -1,
@@ -299,6 +300,7 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
         token_usage={"completion": tokens, "prompt": None},
     )
     return
+
 
 def wrap(
     fn,
@@ -414,9 +416,10 @@ def async_wrap(
                             "user_id", None
                         ) or user_ctx.get() or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                   or user_props
-                                   or user_props_ctx.get(),
-                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                        or user_props
+                        or user_props_ctx.get(),
+                        tags=kwargs.pop(
+                            "tags", None) or tags or tags_ctx.get(),
                         extra=parsed_input.get("extra", None),
                         template_id=kwargs.pop("templateId", None),
                     )
@@ -431,7 +434,8 @@ def async_wrap(
                         type,
                         "error",
                         run_id,
-                        error={"message": str(e), "stack": traceback.format_exc()},
+                        error={"message": str(
+                            e), "stack": traceback.format_exc()},
                     )
 
                     # rethrow error
@@ -447,9 +451,9 @@ def async_wrap(
                         "end",
                         run_id,
                         name=name
-                             or parsed_input[
-                                 "name"
-                             ],  # Need name in case need to compute tokens usage server side
+                        or parsed_input[
+                            "name"
+                        ],  # Need name in case need to compute tokens usage server side
                         output=parsed_output["output"],
                         token_usage=parsed_output["tokensUsage"],
                     )
@@ -480,9 +484,10 @@ def async_wrap(
                             "user_id", None
                         ) or user_ctx.get() or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                   or user_props
-                                   or user_props_ctx.get(),
-                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                        or user_props
+                        or user_props_ctx.get(),
+                        tags=kwargs.pop(
+                            "tags", None) or tags or tags_ctx.get(),
                         extra=parsed_input.get("extra", None),
                         template_id=kwargs.pop("templateId", None),
                     )
@@ -620,7 +625,8 @@ try:
     DEFAULT_API_URL = "https://app.lunary.ai"
 
     user_ctx = ContextVar[Union[str, None]]("user_ctx", default=None)
-    user_props_ctx = ContextVar[Union[str, None]]("user_props_ctx", default=None)
+    user_props_ctx = ContextVar[Union[str, None]](
+        "user_props_ctx", default=None)
 
     spans: Dict[str, Any] = {}
 
@@ -641,7 +647,6 @@ try:
         "logit_bias",
     ]
 
-
     class UserContextManager:
         """Context manager for Lunary user context."""
 
@@ -656,7 +661,6 @@ try:
             user_ctx.set(None)
             user_props_ctx.set(None)
 
-
     def identify(user_id: str, user_props: Any = None) -> UserContextManager:
         """Builds a Lunary UserContextManager
 
@@ -669,7 +673,6 @@ try:
         """
         return UserContextManager(user_id, user_props)
 
-
     def _serialize(obj: Any) -> Union[Dict[str, Any], List[Any], Any]:
         if hasattr(obj, "to_json"):
             return obj.to_json()
@@ -681,7 +684,6 @@ try:
             return [_serialize(element) for element in obj]
 
         return obj
-
 
     def _parse_input(raw_input: Any) -> Any:
         if not raw_input:
@@ -710,7 +712,6 @@ try:
 
         return _serialize(raw_input)
 
-
     def _parse_output(raw_output: dict) -> Any:
         if not raw_output:
             return None
@@ -737,7 +738,6 @@ try:
 
         return _serialize(raw_output)
 
-
     def _parse_lc_role(
         role: str,
     ) -> str:
@@ -745,7 +745,6 @@ try:
             return "user"
         else:
             return role
-
 
     def _get_user_id(metadata: Any) -> Any:
         if user_ctx.get() is not None:
@@ -757,7 +756,6 @@ try:
             user_id = metadata.get("userId")  # legacy, to delete in the future
         return user_id
 
-
     def _get_user_props(metadata: Any) -> Any:
         if user_props_ctx.get() is not None:
             return user_props_ctx.get()
@@ -765,10 +763,10 @@ try:
         metadata = metadata or {}
         return metadata.get("user_props", None)
 
-
     def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
         keys = ["function_call", "tool_calls", "tool_call_id", "name"]
-        parsed = {"text": message.content, "role": _parse_lc_role(message.type)}
+        parsed = {"text": message.content,
+                  "role": _parse_lc_role(message.type)}
         parsed.update(
             {
                 key: cast(Any, message.additional_kwargs.get(key))
@@ -778,10 +776,8 @@ try:
         )
         return parsed
 
-
     def _parse_lc_messages(messages: Union[List[BaseMessage], Any]) -> List[Dict[str, Any]]:
         return [_parse_lc_message(message) for message in messages]
-
 
     class LunaryCallbackHandler(BaseCallbackHandler):
         """Callback Handler for Lunary`.
@@ -861,7 +857,8 @@ try:
                 or bool(os.getenv("LLMONITOR_VERBOSE"))
             )
 
-            _app_id = app_id or os.getenv("LUNARY_APP_ID") or os.getenv("LLMONITOR_APP_ID")
+            _app_id = app_id or os.getenv(
+                "LUNARY_APP_ID") or os.getenv("LLMONITOR_APP_ID")
             if _app_id is None:
                 logger.warning(
                     """[Lunary] app_id must be provided either as an argument or 
@@ -903,9 +900,11 @@ try:
                     span = self.__tracer.start_span("llm", context=context)
                     spans[run_id_str] = span
                 else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
+                    context = self.__set_span_in_context(
+                        self.__trace.get_current_span())
                     span = self.__tracer.start_span("llm", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
+                    parent_run_id = getattr(
+                        getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
                 user_id = _get_user_id(metadata)
@@ -967,7 +966,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                context = self.__set_span_in_context(self.__trace.get_current_span())
+                context = self.__set_span_in_context(
+                    self.__trace.get_current_span())
                 run_id_str = str(run_id)
 
                 # Sometimes parent_run_id is set by langchain, but the
@@ -981,9 +981,11 @@ try:
                     span = self.__tracer.start_span("llm", context=context)
                     spans[run_id_str] = span
                 else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
+                    context = self.__set_span_in_context(
+                        self.__trace.get_current_span())
                     span = self.__tracer.start_span("llm", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
+                    parent_run_id = getattr(
+                        getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
                 user_id = _get_user_id(metadata)
@@ -1028,7 +1030,8 @@ try:
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chat_model_start: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_chat_model_start: {e}")
 
         def on_llm_end(
             self,
@@ -1043,7 +1046,8 @@ try:
                 if span and hasattr(span, "is_recording") and span.is_recording():
                     span.end()
 
-                token_usage = (response.llm_output or {}).get("token_usage", {})
+                token_usage = (response.llm_output or {}
+                               ).get("token_usage", {})
                 parsed_output: Any = [
                     _parse_lc_message(generation.message)
                     if hasattr(generation, "message")
@@ -1088,9 +1092,11 @@ try:
                     span = self.__tracer.start_span("tool", context=context)
                     spans[run_id_str] = span
                 else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
+                    context = self.__set_span_in_context(
+                        self.__trace.get_current_span())
                     span = self.__tracer.start_span("tool", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
+                    parent_run_id = getattr(
+                        getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
                 user_id = _get_user_id(metadata)
@@ -1111,7 +1117,8 @@ try:
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_tool_start: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_tool_start: {e}")
 
         def on_tool_end(
             self,
@@ -1155,9 +1162,11 @@ try:
                     span = self.__tracer.start_span("chain", context=context)
                     spans[run_id_str] = span
                 else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
+                    context = self.__set_span_in_context(
+                        self.__trace.get_current_span())
                     span = self.__tracer.start_span("tool", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
+                    parent_run_id = getattr(
+                        getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
                 name = serialized.get("id", [None, None, None, None])[3]
@@ -1175,6 +1184,7 @@ try:
                     name = agentName
                 if parent_run_id is not None:
                     type = "chain"
+                    name = kwargs.get("name")
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -1194,7 +1204,8 @@ try:
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_start: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_chain_start: {e}")
 
         def on_chain_end(
             self,
@@ -1219,7 +1230,8 @@ try:
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_end: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_chain_end: {e}")
 
         def on_agent_finish(
             self,
@@ -1243,7 +1255,8 @@ try:
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_agent_finish: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_agent_finish: {e}")
 
         def on_chain_error(
             self,
@@ -1261,11 +1274,13 @@ try:
                     "chain",
                     "error",
                     run_id=run_id,
-                    error={"message": str(error), "stack": traceback.format_exc()},
+                    error={"message": str(
+                        error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_error: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_chain_error: {e}")
 
         def on_tool_error(
             self,
@@ -1283,11 +1298,13 @@ try:
                     "tool",
                     "error",
                     run_id=run_id,
-                    error={"message": str(error), "stack": traceback.format_exc()},
+                    error={"message": str(
+                        error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_tool_error: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_tool_error: {e}")
 
         def on_llm_error(
             self,
@@ -1305,11 +1322,13 @@ try:
                     "llm",
                     "error",
                     run_id=run_id,
-                    error={"message": str(error), "stack": traceback.format_exc()},
+                    error={"message": str(
+                        error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_llm_error: {e}")
+                logger.error(
+                    f"[Lunary] An error occurred in on_llm_error: {e}")
 
 except Exception as e:
     pass
@@ -1331,8 +1350,8 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
     track_event(None, "feedback", run_id=run_id, feedback=feedback)
 
 
-
 templateCache = {}
+
 
 def get_raw_template(slug="kind-angle"):
     APP_ID = (
@@ -1346,10 +1365,12 @@ def get_raw_template(slug="kind-angle"):
     if cache_entry and now - cache_entry['timestamp'] < 60000:
         return cache_entry['data']
 
-    response = requests.get(f"{DEFAULT_API_URL}/api/v1/template?slug={slug}&app_id={APP_ID}", headers={"Content-Type": "application/json"})
+    response = requests.get(f"{DEFAULT_API_URL}/api/v1/template?slug={slug}&app_id={
+                            APP_ID}", headers={"Content-Type": "application/json"})
 
     if not response.ok:
-        raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
+        raise Exception(f"Lunary: Error fetching template: {
+                        response.status_code} - {response.text}")
 
     data = response.json()
     templateCache[slug] = {'timestamp': now, 'data': data}
@@ -1362,7 +1383,6 @@ def render_template(slug, data):
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
         extra = copy.deepcopy(raw_template['extra'])
-
 
         text_mode = isinstance(content, str)
 
@@ -1385,11 +1405,13 @@ def render_template(slug, data):
 
 
 def get_dataset(dataset_id):
-    APP_ID = os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+    APP_ID = os.environ.get(
+        "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
 
     try:
         url = f"{DEFAULT_API_URL}/v1/projects/{APP_ID}/datasets/{dataset_id}"
-        response = requests.get(url, headers={"Content-Type": "application/json"})
+        response = requests.get(
+            url, headers={"Content-Type": "application/json"})
 
         raise Exception("Error")
         data = response.json()
