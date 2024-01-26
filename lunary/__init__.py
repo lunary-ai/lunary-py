@@ -25,8 +25,9 @@ from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .consumer import Consumer
 # DO NOT REMOVE `identify` import
-from .users import user_ctx, user_props_ctx, identify
+from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
+from .parent import parent_ctx, parent # DO NOT REMOVE `parent` import
 from .thread import Thread
 
 DEFAULT_API_URL = "https://app.lunary.ai"
@@ -100,6 +101,11 @@ def track_event(
 
     if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
         parent_run_id = str(run_ctx.get())
+    
+
+    if parent_ctx.get() is not None:
+        parent_run_id = str(parent_ctx.get())
+        parent_ctx.set(None)
 
     event = {
         "event": event_name,
