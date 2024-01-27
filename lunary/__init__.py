@@ -63,6 +63,21 @@ def clean_nones(value):
     else:
         return value
 
+def get_parent_run_id(parent_run_id: str, run_type: str):
+    if parent_run_id == "None":
+        parent_run_id = None
+
+    if parent_run_id is not None:
+        return str(parent_run_id)
+
+    if parent_ctx.get() and run_type != "thread":
+        return str(parent_ctx.get())
+    
+    if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
+       return str(run_ctx.get())
+
+
+
 
 def track_event(
     run_type,
@@ -96,16 +111,8 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_APP_ID is not set, not sending events")
 
-    if parent_run_id:
-        parent_run_id = str(parent_run_id)
-
-    if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
-        parent_run_id = str(run_ctx.get())
+    parent_run_id = get_parent_run_id(parent_run_id, run_type)
     
-
-    if parent_ctx.get() is not None:
-        parent_run_id = str(parent_ctx.get())
-        parent_ctx.set(None)
 
     event = {
         "event": event_name,
