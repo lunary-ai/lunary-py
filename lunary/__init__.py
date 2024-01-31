@@ -887,15 +887,6 @@ try:
             if self.__has_valid_config is False:
                 return None
 
-            try:
-                res = requests.get(f"{self.__api_url}/api/app/{self.__app_id}")
-                if not res.ok:
-                    raise ConnectionError()
-            except Exception:
-                logger.warning(
-                    f"""[Lunary] Could not connect to the Lunary API at
-                    {self.__api_url}"""
-                )
 
         def on_llm_start(
             self,
