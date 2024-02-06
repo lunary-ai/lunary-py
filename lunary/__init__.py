@@ -1364,6 +1364,10 @@ def get_raw_template(slug="kind-angle"):
 def render_template(slug, data):
     try:
         raw_template = get_raw_template(slug)
+
+        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+            raise Exception("Template not found, is the project ID correct?")
+
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
         extra = copy.deepcopy(raw_template['extra'])
