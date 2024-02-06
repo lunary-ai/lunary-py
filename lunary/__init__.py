@@ -1361,7 +1361,7 @@ def get_raw_template(slug="kind-angle"):
     return data
 
 
-def render_template(slug, data):
+def render_template(slug, data = {}):
     try:
         raw_template = get_raw_template(slug)
 
