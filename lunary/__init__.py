@@ -1393,16 +1393,56 @@ def render_template(slug, data = {}):
         print(e)
 
 
-def get_dataset(dataset_id):
-    APP_ID = os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+import humps
+
+def get_dataset(slug: str):
+    token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
     try:
-        url = f"{DEFAULT_API_URL}/v1/projects/{APP_ID}/datasets/{dataset_id}"
-        response = requests.get(url, headers={"Content-Type": "application/json"})
+        url = f"{api_url}/v1/datasets/{slug}"
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+        response = requests.get(url, headers=headers)
 
-        raise Exception("Error")
-        data = response.json()
-        return data['runs']
+        dataset = response.json()
+        return humps.decamelize(dataset)
 
     except Exception as e:
-        print("Lunary: Error fetching dataset: you must be on the Unlimited or Enterprise plan to use this feature.")
+        print(e)
+        print("[Lunary]: Error fetching dataset. Pleae contact support@lunary.ai if the problem persists.")
+
+
+def evaluate_result(checks: str, input, output, ideal_output, context, model=None):
+    token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+
+    try:
+        url = f"{api_url}/v1/evaluations/run"
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+        data = {
+            "checks": checks,
+            "input": input,
+            "output": output,
+            "idealOutput": ideal_output,
+            "context": context,
+            "model": model
+        }
+
+        response = requests.post(url, headers=headers, json=data)
+        
+        data = humps.decamelize(response.json())
+        passed = data["passed"]
+        results = data["results"]
+
+        return  passed, results
+
+    except Exception as e:
+        print(e)
+        print("[Lunary]: Error evaluating result. Pleae contact support@lunary.ai if the problem persists.")
+
