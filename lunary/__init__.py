@@ -30,7 +30,7 @@ from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 from .parent import parent_ctx, parent # DO NOT REMOVE `parent` import
 from .thread import Thread
 
-DEFAULT_API_URL = "https://app.lunary.ai"
+DEFAULT_API_URL = "https://api.lunary.ai"
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +77,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str):
        return str(run_ctx.get())
 
 
-
-
 def track_event(
     run_type,
     event_name,
@@ -102,14 +100,14 @@ def track_event(
 ):
     # Load here in case load_dotenv done after
     APP_ID = (
-        app_id or os.environ.get(
+        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     VERBOSE = os.environ.get(
         "LUNARY_VERBOSE") or os.environ.get("LLMONITOR_VERBOSE")
 
     if not APP_ID:
-        return warnings.warn("LUNARY_APP_ID is not set, not sending events")
+        return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
     parent_run_id = get_parent_run_id(parent_run_id, run_type)
     
@@ -117,7 +115,6 @@ def track_event(
     event = {
         "event": event_name,
         "type": run_type,
-        "app": APP_ID,
         "name": name,
         "userId": user_id or user_ctx.get(),
         "userProps": user_props or user_props_ctx.get(),
@@ -630,7 +627,7 @@ try:
 
     logger = logging.getLogger(__name__)
 
-    DEFAULT_API_URL = "https://app.lunary.ai"
+    DEFAULT_API_URL = "https://api.lunary.ai"
 
     user_ctx = ContextVar[Union[str, None]]("user_ctx", default=None)
     user_props_ctx = ContextVar[Union[str, None]]("user_props_ctx", default=None)
@@ -801,10 +798,10 @@ try:
 
         #### Parameters:
             - `app_id`: The app id of the app you want to report to. Defaults to
-            `None`, which means that `LUNARY_APP_ID` will be used.
+            `None`, which means that `LUNARY_PUBLIC_KEY` will be used.
             - `api_url`: The url of the Lunary API. Defaults to `None`,
             which means that either `LUNARY_API_URL` environment variable
-            or `https://app.lunary.ai` will be used.
+            or `https://api.lunary.ai` will be used.
 
         #### Raises:
             - `ValueError`: if `app_id` is not provided either as an
@@ -874,7 +871,7 @@ try:
                 or bool(os.getenv("LLMONITOR_VERBOSE"))
             )
 
-            _app_id = app_id or os.getenv("LUNARY_APP_ID") or os.getenv("LLMONITOR_APP_ID")
+            _app_id = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.getenv("LUNARY_APP_ID") or os.getenv("LLMONITOR_APP_ID")
             if _app_id is None:
                 logger.warning(
                     """[Lunary] app_id must be provided either as an argument or 
@@ -1339,9 +1336,9 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
 
 templateCache = {}
 
-def get_raw_template(slug="kind-angle"):
-    APP_ID = (
-        os.environ.get(
+def get_raw_template(slug):
+    token = (
+        os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     global templateCache
@@ -1351,7 +1348,12 @@ def get_raw_template(slug="kind-angle"):
     if cache_entry and now - cache_entry['timestamp'] < 60000:
         return cache_entry['data']
 
-    response = requests.get(f"{DEFAULT_API_URL}/api/v1/template?slug={slug}&app_id={APP_ID}", headers={"Content-Type": "application/json"})
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+    
+    response = requests.get(f"{DEFAULT_API_URL}/v1/template_versions/latest?slug={slug}", headers=headers)
 
     if not response.ok:
         raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
@@ -1402,7 +1404,7 @@ class DatasetItem:
                 setattr(self, key, value)
 
 def get_dataset(slug: str):
-    token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+    token = os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
     try:
@@ -1430,7 +1432,7 @@ def get_dataset(slug: str):
 
 
 def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None):
-    token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+    token = os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
     try:
