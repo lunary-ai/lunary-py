@@ -1395,6 +1395,12 @@ def render_template(slug, data = {}):
 
 import humps
 
+class DatasetItem:
+    def __init__(self, d=None):
+        if d is not None:
+            for key, value in d.items():
+                setattr(self, key, value)
+
 def get_dataset(slug: str):
     token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
@@ -1406,16 +1412,24 @@ def get_dataset(slug: str):
             'Content-Type': 'application/json'
         }
         response = requests.get(url, headers=headers)
-
-        dataset = response.json()
-        return humps.decamelize(dataset)
+        if response.ok:
+            dataset = response.json()
+            dataset = humps.decamelize(dataset)
+            items_data = dataset.get('items', [])
+            items = [DatasetItem(d=item) for item in items_data]
+            
+            return items
+        else:
+            print(f"[Lunary]: Error fetching dataset with status code {response.status_code}. Please contact support@lunary.ai if the problem persists.")
+            return []
 
     except Exception as e:
         print(e)
-        print("[Lunary]: Error fetching dataset. Pleae contact support@lunary.ai if the problem persists.")
+        print("[Lunary]: Error fetching dataset. Please contact support@lunary.ai if the problem persists.")
 
 
-def evaluate_result(checks: str, input, output, ideal_output, context, model=None):
+
+def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None):
     token = os.environ.get("LUNARY_PROJECT_ID") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
@@ -1426,13 +1440,21 @@ def evaluate_result(checks: str, input, output, ideal_output, context, model=Non
             'Content-Type': 'application/json'
         }
         data = {
-            "checks": checks,
+            "checklist": checklist,
             "input": input,
-            "output": output,
-            "idealOutput": ideal_output,
-            "context": context,
-            "model": model
+            "output": output
         }
+        if ideal_output is not None:
+            data["idealOutput"] = ideal_output
+        if context is not None:
+            data["context"] = context
+        if model is not None:
+            data["model"] = model
+        if duration is not None:
+            data["duration"] = duration
+        if tags is not None:
+            data["tags"] = tags
+
 
         response = requests.post(url, headers=headers, json=data)
         
@@ -1440,7 +1462,7 @@ def evaluate_result(checks: str, input, output, ideal_output, context, model=Non
         passed = data["passed"]
         results = data["results"]
 
-        return  passed, results
+        return passed, results
 
     except Exception as e:
         print(e)
