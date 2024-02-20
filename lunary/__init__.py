@@ -740,15 +740,15 @@ try:
         answer_value = raw_output.get("answer")
         result_value = raw_output.get("result")
 
-        if text_value is None:
+        if text_value is not None:
             return text_value
-        if answer_value is None:
+        if answer_value is not None:
             return answer_value
-        if output_value is None:
+        if output_value is not None:
             return output_value
-        if output_text_value is None:
+        if output_text_value is not None:
             return output_text_value
-        if result_value is None:
+        if result_value is not None:
             return result_value
 
         return _serialize(raw_output)
