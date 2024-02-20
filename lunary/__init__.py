@@ -725,7 +725,7 @@ try:
 
 
     def _parse_output(raw_output: dict) -> Any:
-        if not raw_output:
+        if raw_output is None:
             return None
 
         if not isinstance(raw_output, dict):
@@ -737,15 +737,15 @@ try:
         answer_value = raw_output.get("answer")
         result_value = raw_output.get("result")
 
-        if text_value:
+        if text_value is None:
             return text_value
-        if answer_value:
+        if answer_value is None:
             return answer_value
-        if output_value:
+        if output_value is None:
             return output_value
-        if output_text_value:
+        if output_text_value is None:
             return output_text_value
-        if result_value:
+        if result_value is None:
             return result_value
 
         return _serialize(raw_output)
