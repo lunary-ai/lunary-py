@@ -693,7 +693,10 @@ try:
         if isinstance(obj, list):
             return [_serialize(element) for element in obj]
 
-        return obj
+        try:
+            return json.dumps(obj)
+        except Exception:
+            return obj
 
 
     def _parse_input(raw_input: Any) -> Any:
