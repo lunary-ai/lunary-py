@@ -1,7 +1,7 @@
 <div align="center">
 
 <img src="https://lunary.ai/logo.png" style='border-radius: 12px;' width="50"/> 
-<h1>LLMonitor Python SDK</h1>
+<h1>Lunary Python SDK</h1>
 
 **📈 Python monitoring for AI apps and agent**
 
