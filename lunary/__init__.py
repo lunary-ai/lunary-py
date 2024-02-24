@@ -690,7 +690,10 @@ try:
         if isinstance(obj, list):
             return [_serialize(element) for element in obj]
 
-        return obj
+        try:
+            return json.dumps(obj)
+        except Exception:
+            return obj
 
 
     def _parse_input(raw_input: Any) -> Any:
@@ -722,7 +725,7 @@ try:
 
 
     def _parse_output(raw_output: dict) -> Any:
-        if not raw_output:
+        if raw_output is None:
             return None
 
         if not isinstance(raw_output, dict):
@@ -734,15 +737,15 @@ try:
         answer_value = raw_output.get("answer")
         result_value = raw_output.get("result")
 
-        if text_value:
+        if text_value is not None:
             return text_value
-        if answer_value:
+        if answer_value is not None:
             return answer_value
-        if output_value:
+        if output_value is not None:
             return output_value
-        if output_text_value:
+        if output_text_value is not None:
             return output_text_value
-        if result_value:
+        if result_value is not None:
             return result_value
 
         return _serialize(raw_output)
