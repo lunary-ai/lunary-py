@@ -16,6 +16,7 @@ template = """Answer the question based only on the following context:
 
 Question: {question}
 """
+
 prompt = ChatPromptTemplate.from_template(template)
 model = ChatOpenAI()
 output_parser = StrOutputParser()

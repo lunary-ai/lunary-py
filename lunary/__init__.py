@@ -1465,7 +1465,7 @@ def render_template(slug, data = {}):
         raw_template = get_raw_template(slug)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, is the project ID correct?")
+            raise Exception("Template not found, are the project ID and slug correct?")
 
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
@@ -1486,6 +1486,45 @@ def render_template(slug, data = {}):
             result = {"messages": messages, "templateId": template_id, **extra}
 
             return result
+
+    except Exception as e:
+        print(e)
+
+def get_langchain_template(slug):
+
+    try:
+        raw_template = get_raw_template(slug)
+
+        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+            raise Exception("Template not found, are the project ID and slug correct?")
+
+        content = copy.deepcopy(raw_template['content'])
+
+        def replace_double_braces(text):
+            return text.replace("{{", "{").replace("}}", "}")
+
+        text_mode = isinstance(content, str)
+
+        if text_mode:
+            # replace {{ variables }} with { variables }
+            rendered = replace_double_braces(content)
+            return rendered
+
+        else:
+
+            # Return array of messages like that:
+            #  [
+            #     ("system", "You are a helpful AI bot. Your name is {name}."),
+            #     ("human", "Hello, how are you doing?"),
+            #     ("ai", "I'm doing well, thanks!"),
+            #     ("human", "{user_input}"),
+            # ]
+            
+            messages = []
+            for message in content:
+                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+
+            return messages
 
     except Exception as e:
         print(e)
