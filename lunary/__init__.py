@@ -615,13 +615,14 @@ try:
     import traceback
     import warnings
     from contextvars import ContextVar
-    from typing import Any, Dict, List, Union, cast
+    from typing import Any, Dict, List, Union, cast, Sequence, Optional
     from uuid import UUID
 
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.messages import BaseMessage
+    from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
     from packaging.version import parse
 
@@ -708,18 +709,21 @@ try:
             return _serialize(raw_input)
 
         input_value = raw_input.get("input")
+        content = raw_input.get("content")
         inputs_value = raw_input.get("inputs")
         question_value = raw_input.get("question")
         query_value = raw_input.get("query")
 
-        if input_value:
+        if input_value is not None:
             return input_value
-        if inputs_value:
+        if inputs_value is not None:
             return inputs_value
-        if question_value:
+        if question_value is not None:
             return question_value
-        if query_value:
+        if query_value is not None:
             return query_value
+        if content is not None:
+            return content
 
         return _serialize(raw_input)
 
@@ -781,7 +785,7 @@ try:
 
     def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
         keys = ["function_call", "tool_calls", "tool_call_id", "name"]
-        parsed = {"text": message.content, "role": _parse_lc_role(message.type)}
+        parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
         parsed.update(
             {
                 key: cast(Any, message.additional_kwargs.get(key))
@@ -814,11 +818,11 @@ try:
 
         #### Example:
         ```python
-        from langchain.llms import OpenAI
-        from langchain.callbacks import LunaryCallbackHandler
+        from langchain_openai.chat_models import ChatOpenAI
+        from lunary import LunaryCallbackHandler
 
         handler = LunaryCallbackHandler()
-        llm = OpenAI(callbacks=[handler],
+        llm = ChatOpenAI(callbacks=[handler],
                     metadata={"userId": "user-123"})
         llm.predict("Hello, how are you?")
         ```
@@ -1160,7 +1164,7 @@ try:
                     spans[run_id_str] = span
                 else:
                     context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("tool", context=context)
+                    span = self.__tracer.start_span("chain", context=context)
                     parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
@@ -1316,6 +1320,96 @@ try:
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_llm_error: {e}")
 
+        def on_retriever_start(
+            self,
+            serialized: Dict[str, Any],
+            query: str,
+            run_id: Optional[UUID] = None,
+            parent_run_id: Optional[UUID] = None,
+            **kwargs: Any,
+        ) -> None:
+            try:
+                run_id_str = str(run_id)
+                if parent_run_id and spans.get(str(parent_run_id)):
+                    parent = spans[str(parent_run_id)]
+                    context = self.__set_span_in_context(parent)
+                    span = self.__tracer.start_span("retriever", context=context)
+                    spans[run_id_str] = span
+                else:
+                    context = self.__set_span_in_context(self.__trace.get_current_span())
+                    span = self.__tracer.start_span("retriever", context=context)
+                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
+                    spans[run_id_str] = span
+
+                user_id = _get_user_id(kwargs.get("metadata"))
+                user_props = _get_user_props(kwargs.get("metadata"))
+
+                name = serialized.get("name")
+
+                self.__track_event(
+                    "retriever",
+                    "start",
+                    user_id=user_id,
+                    run_id=run_id_str,
+                    parent_run_id=parent_run_id,
+                    name=name,
+                    input=query,
+                    app_id=self.__app_id,
+                )
+            except Exception as e:
+                logger.error(f"[Lunary] An error occurred in on_retriever_start: {e}")
+
+
+        def on_retriever_end(
+            self,
+            documents: Sequence[Document],
+            run_id: UUID,
+            parent_run_id: Union[UUID, None] = None,
+            **kwargs: Any,
+        ) -> None:
+            try:
+
+                run_id_str = str(run_id)
+                span = spans.get(run_id_str)
+                if span and hasattr(span, "is_recording") and span.is_recording():
+                    span.end()
+
+                # only report the metadata
+                doc_metadatas = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
+
+                print(f"[Lunary] Retriever end: {kwargs}")
+                self.__track_event(
+                    "retriever",
+                    "end",
+                    run_id=run_id_str,
+                    parent_run_id=parent_run_id,
+                    output=doc_metadatas,
+                    app_id=self.__app_id,
+                )
+            except Exception as e:
+                logger.error(f"[Lunary] An error occurred in on_retriever_end: {e}")
+            
+
+        def on_retriever_error(
+            self,
+            error: BaseException,
+            run_id: UUID,
+            parent_run_id: Union[UUID, None] = None,
+            **kwargs: Any,
+        ) -> None:
+            try:
+                run_id_str = str(run_id)
+
+                self.__track_event(
+                    "retriever",
+                    "error",
+                    run_id=run_id_str,
+                    error={"message": str(error), "stack": traceback.format_exc()},
+                    app_id=self.__app_id,
+                )
+            except Exception as e:
+                logger.error(f"[Lunary] An error occurred in on_retriever_error: {e}")
+
 except Exception as e:
     pass
 
@@ -1376,7 +1470,6 @@ def render_template(slug, data = {}):
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
         extra = copy.deepcopy(raw_template['extra'])
-
 
         text_mode = isinstance(content, str)
 
