@@ -15,8 +15,6 @@ def my_llm_agent(input):
 
 dataset = lunary.get_dataset("test") # Replace with the name of the dataset you want to use
 
-print(dataset)
-
 for item in dataset:
   result = my_llm_agent(item.input)
   print(result)

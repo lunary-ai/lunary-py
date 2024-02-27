@@ -1460,74 +1460,66 @@ def get_raw_template(slug):
 
 
 def render_template(slug, data = {}):
-    try:
-        raw_template = get_raw_template(slug)
 
-        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, are the project ID and slug correct?")
+    raw_template = get_raw_template(slug)
 
-        template_id = copy.deepcopy(raw_template['id'])
-        content = copy.deepcopy(raw_template['content'])
-        extra = copy.deepcopy(raw_template['extra'])
+    if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+        raise Exception("Template not found, are the project ID and slug correct?")
 
-        text_mode = isinstance(content, str)
+    template_id = copy.deepcopy(raw_template['id'])
+    content = copy.deepcopy(raw_template['content'])
+    extra = copy.deepcopy(raw_template['extra'])
 
-        result = None
-        if text_mode:
-            rendered = chevron.render(content, data)
-            result = {"text": rendered, "templateId": template_id, **extra}
-            return result
-        else:
-            messages = []
-            for message in content:
-                message["content"] = chevron.render(message["content"], data)
-                messages.append(message)
-            result = {"messages": messages, "templateId": template_id, **extra}
+    text_mode = isinstance(content, str)
 
-            return result
+    result = None
+    if text_mode:
+        rendered = chevron.render(content, data)
+        result = {"text": rendered, "templateId": template_id, **extra}
+        return result
+    else:
+        messages = []
+        for message in content:
+            message["content"] = chevron.render(message["content"], data)
+            messages.append(message)
+        result = {"messages": messages, "templateId": template_id, **extra}
 
-    except Exception as e:
-        print(e)
+        return result
 
 def get_langchain_template(slug):
 
-    try:
-        raw_template = get_raw_template(slug)
+    raw_template = get_raw_template(slug)
 
-        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, are the project ID and slug correct?")
+    if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+        raise Exception("Template not found, are the project ID and slug correct?")
 
-        content = copy.deepcopy(raw_template['content'])
+    content = copy.deepcopy(raw_template['content'])
 
-        def replace_double_braces(text):
-            return text.replace("{{", "{").replace("}}", "}")
+    def replace_double_braces(text):
+        return text.replace("{{", "{").replace("}}", "}")
 
-        text_mode = isinstance(content, str)
+    text_mode = isinstance(content, str)
 
-        if text_mode:
-            # replace {{ variables }} with { variables }
-            rendered = replace_double_braces(content)
-            return rendered
+    if text_mode:
+        # replace {{ variables }} with { variables }
+        rendered = replace_double_braces(content)
+        return rendered
 
-        else:
+    else:
 
-            # Return array of messages like that:
-            #  [
-            #     ("system", "You are a helpful AI bot. Your name is {name}."),
-            #     ("human", "Hello, how are you doing?"),
-            #     ("ai", "I'm doing well, thanks!"),
-            #     ("human", "{user_input}"),
-            # ]
-            
-            messages = []
-            for message in content:
-                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+        # Return array of messages like that:
+        #  [
+        #     ("system", "You are a helpful AI bot. Your name is {name}."),
+        #     ("human", "Hello, how are you doing?"),
+        #     ("ai", "I'm doing well, thanks!"),
+        #     ("human", "{user_input}"),
+        # ]
+        
+        messages = []
+        for message in content:
+            messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
 
-            return messages
-
-    except Exception as e:
-        print(e)
-
+        return messages
 
 import humps
 
@@ -1560,8 +1552,8 @@ def get_dataset(slug: str):
             return []
 
     except Exception as e:
-        print(e)
         print("[Lunary]: Error fetching dataset. Please contact support@lunary.ai if the problem persists.")
+        raise e
 
 
 
@@ -1591,9 +1583,11 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         if tags is not None:
             data["tags"] = tags
 
-
         response = requests.post(url, headers=headers, json=data)
-        
+        if response.status_code == 500:
+            error_message = response.json().get('message')
+            raise Exception(f"[Lunary]: Evaluation error: {error_message}")
+
         data = humps.decamelize(response.json())
         passed = data["passed"]
         results = data["results"]
@@ -1601,6 +1595,6 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         return passed, results
 
     except Exception as e:
-        print(e)
-        print("[Lunary]: Error evaluating result. Pleae contact support@lunary.ai if the problem persists.")
+        print("[Lunary]: Error evaluating result. Please contact support@lunary.ai if the problem persists.")
+        raise e
 
