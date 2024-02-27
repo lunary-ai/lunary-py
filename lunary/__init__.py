@@ -1377,7 +1377,6 @@ try:
                 # only report the metadata
                 doc_metadatas = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
 
-                print(f"[Lunary] Retriever end: {kwargs}")
                 self.__track_event(
                     "retriever",
                     "end",
