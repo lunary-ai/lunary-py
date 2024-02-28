@@ -749,7 +749,12 @@ try:
         if not isinstance(raw_output, dict):
             return _serialize(raw_output)
 
-        lc_serialized_messages = raw_output.get("kwargs", {}).get("messages")
+        agent_finish_output = raw_output.get("kwargs", {}).get("return_values", {}).get("output")
+        if agent_finish_output:
+            return agent_finish_output
+
+        lc_serialized_messages = raw_output.get("kwargs", {}).get("messages") 
+
         if lc_serialized_messages: 
             for message in lc_serialized_messages:
                 if _is_serialized_lc_message(message):
@@ -792,8 +797,9 @@ try:
         except Exception:
             return False 
 
-    def _deserialize_lc_serialized_message(message: dict) -> AnyMessage:
+    def _deserialize_lc_serialized_message(message: dict) -> Any:
         model = message.get("id")[3]
+
         if model == 'AIMessage':
             return AIMessage.parse_obj(message["kwargs"])
         elif model == 'FunctionMessage':
