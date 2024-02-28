@@ -97,6 +97,7 @@ def track_event(
     extra=None,
     template_id=None,
     metadata=None,
+    runtime=None,
     app_id=None,
 ):
     # Load here in case load_dotenv done after
@@ -130,7 +131,7 @@ def track_event(
         "error": error,
         "extra": extra,
         "feedback": feedback,
-        "runtime": "lunary-py",
+        "runtime": runtime or "lunary-py",
         "tokensUsage": token_usage,
         "metadata": metadata,
         "templateId": template_id,
