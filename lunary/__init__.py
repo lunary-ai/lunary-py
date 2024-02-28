@@ -544,7 +544,7 @@ def monitor(object):
                 )
             else:
                 logging.info(
-                    "[Lunary] Uknonwn OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
+                    "[Lunary] Unknown OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
                 )
         elif openai_version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
@@ -623,7 +623,7 @@ try:
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
-    from langchain_core.messages import BaseMessage
+    from langchain_core.messages import BaseMessage, AnyMessage, AIMessage, ChatMessage, FunctionMessage, HumanMessage, SystemMessage, ToolMessage
     from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
     from packaging.version import parse
@@ -692,6 +692,10 @@ try:
 
         if isinstance(obj, list):
             return [_serialize(element) for element in obj]
+        
+        if isinstance(obj, str):
+            return obj
+
 
         try:
             return json.dumps(obj)
@@ -707,8 +711,17 @@ try:
         if isinstance(raw_input, list) and len(raw_input) == 1:
             return _parse_input(raw_input[0])
 
+
+        if isinstance(raw_input, BaseMessage):
+            return _parse_lc_message(raw_input)
+
         if not isinstance(raw_input, dict):
             return _serialize(raw_input)
+        
+
+        if _is_serialized_lc_message(raw_input):
+            message = _deserialize_lc_serialized_message(raw_input)
+            return _parse_lc_message(message)
 
         input_value = raw_input.get("input")
         content = raw_input.get("content")
@@ -729,13 +742,19 @@ try:
 
         return _serialize(raw_input)
 
-
     def _parse_output(raw_output: dict) -> Any:
         if raw_output is None:
             return None
 
         if not isinstance(raw_output, dict):
             return _serialize(raw_output)
+
+        lc_serialized_messages = raw_output.get("kwargs", {}).get("messages")
+        if lc_serialized_messages: 
+            for message in lc_serialized_messages:
+                if _is_serialized_lc_message(message):
+                    message = _deserialize_lc_serialized_message(message)
+                    return _parse_lc_message(message)
 
         text_value = raw_output.get("text")
         output_value = raw_output.get("output")
@@ -756,6 +775,37 @@ try:
 
         return _serialize(raw_output)
 
+    def _is_serialized_lc_message(obj: dict) -> bool:
+        try: 
+            if obj['lc'] != 1:
+                return False
+            
+            if len(obj['id']) < 4:
+                return False
+
+            
+            if obj['id'][:3] != ['langchain', 'schema', 'messages']:
+                return False
+            
+
+            return True
+        except Exception:
+            return False 
+
+    def _deserialize_lc_serialized_message(message: dict) -> AnyMessage:
+        model = message.get("id")[3]
+        if model == 'AIMessage':
+            return AIMessage.parse_obj(message["kwargs"])
+        elif model == 'FunctionMessage':
+            return FunctionMessage.parse_obj(message["kwargs"])
+        elif model == 'HumanMessage':
+            return HumanMessage.parse_obj(message["kwargs"])
+        elif model == 'SystemMessage':
+            return SystemMessage.parse_obj(message["kwargs"])
+        elif model == 'ToolMessage':
+            return ToolMessage.parse_obj(message["kwargs"])
+
+
 
     def _parse_lc_role(
         role: str,
@@ -772,8 +822,6 @@ try:
 
         metadata = metadata or {}
         user_id = metadata.get("user_id")
-        if user_id is None:
-            user_id = metadata.get("userId")  # legacy, to delete in the future
         return user_id
 
 
