@@ -346,7 +346,7 @@ def wrap(
                     or user_props_ctx.get(),
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                     extra=kwargs.get("extra", None),
-                    template_id=kwargs.pop("templateId", None),
+                    template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                 )
             except Exception as e:
                 handle_internal_error(e)
@@ -430,7 +430,7 @@ def async_wrap(
                                    or user_props_ctx.get(),
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         extra=parsed_input.get("extra", None),
-                        template_id=kwargs.pop("templateId", None),
+                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
                     handle_internal_error(e)
@@ -496,7 +496,7 @@ def async_wrap(
                                    or user_props_ctx.get(),
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         extra=parsed_input.get("extra", None),
-                        template_id=kwargs.pop("templateId", None),
+                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
                     handle_internal_error(e)
@@ -1528,17 +1528,28 @@ def render_template(slug, data = {}):
 
     text_mode = isinstance(content, str)
 
+    # extra_headers is safe with OpenAI to be used to pass value
+    extra_headers = {
+        "Template-Id": str(template_id)
+    }
+
     result = None
     if text_mode:
         rendered = chevron.render(content, data)
-        result = {"text": rendered, "templateId": template_id, **extra}
+        result = {
+            "text": rendered, "extra_headers": extra_headers, **extra
+        }
         return result
     else:
         messages = []
         for message in content:
             message["content"] = chevron.render(message["content"], data)
             messages.append(message)
-        result = {"messages": messages, "templateId": template_id, **extra}
+        result = {
+            "messages": messages, 
+            "extra_headers": extra_headers,
+            **extra
+        }
 
         return result
 
