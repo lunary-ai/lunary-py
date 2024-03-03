@@ -851,13 +851,13 @@ try:
 
 
 
-    def _parse_lc_role(
-        role: str,
-    ) -> str:
-        if role == "human":
-            return "user"
-        else:
-            return role
+    # def _parse_lc_role(
+    #     role: str,
+    # ) -> str:
+    #     if role == "human":
+    #         return "user"
+    #     else:
+    #         return role
 
 
     def _get_user_id(metadata: Any) -> Any:
@@ -877,17 +877,17 @@ try:
         return metadata.get("user_props", None)
 
 
-    def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
-        keys = ["function_call", "tool_calls", "tool_call_id", "name"]
-        parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
-        parsed.update(
-            {
-                key: cast(Any, message.additional_kwargs.get(key))
-                for key in keys
-                if message.additional_kwargs.get(key) is not None
-            }
-        )
-        return parsed
+    # def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
+    #     keys = ["function_call", "tool_calls", "tool_call_id", "name"]
+    #     parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
+    #     parsed.update(
+    #         {
+    #             key: cast(Any, message.additional_kwargs.get(key))
+    #             for key in keys
+    #             if message.additional_kwargs.get(key) is not None
+    #         }
+    #     )
+    #     return parsed
 
 
     def _parse_lc_messages(messages: Union[List[BaseMessage], Any]) -> List[Dict[str, Any]]:
