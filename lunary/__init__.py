@@ -623,9 +623,26 @@ try:
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
-    from langchain_core.messages import BaseMessage, AnyMessage, AIMessage, ChatMessage, FunctionMessage, HumanMessage, SystemMessage, ToolMessage
+    from langchain_core.messages import (
+        AIMessage,
+        AIMessageChunk,
+        AnyMessage,
+        BaseMessage,
+        BaseMessageChunk,
+        ChatMessage,
+        ChatMessageChunk,
+        FunctionMessage,
+        FunctionMessageChunk,
+        HumanMessage,
+        HumanMessageChunk,
+        SystemMessage,
+        SystemMessageChunk,
+        ToolMessage,
+        ToolMessageChunk,
+    )
     from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
+    from langchain_core.load import dumps
     from packaging.version import parse
 
     logger = logging.getLogger(__name__)
@@ -683,104 +700,31 @@ try:
         return UserContextManager(user_id, user_props)
 
 
-    def _serialize(obj: Any) -> Union[Dict[str, Any], List[Any], Any]:
-        if hasattr(obj, "to_json"):
-            return obj.to_json()
-
-        if isinstance(obj, dict):
-            return {key: _serialize(value) for key, value in obj.items()}
-
-        if isinstance(obj, list):
-            return [_serialize(element) for element in obj]
-        
-        if isinstance(obj, str):
-            return obj
-
-
-        try:
-            return json.dumps(obj)
-        except Exception:
-            return obj
-
+    def _serialize(data: Any):
+        if not data:
+            return None
+            
+        if hasattr(data, 'is_lc_serializable'):
+            if data.is_lc_serializable():
+                return data.to_json()
+        elif isinstance(data, dict):
+            return {key: _serialize(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [_serialize(item) for item in data]
+        elif isinstance(data, (str, int, float, bool)):
+            return data
+        else:
+            return dumps(data)
 
     def _parse_input(raw_input: Any) -> Any:
-        if not raw_input:
-            return None
-
-        # if it's an array of 1, just parse the first element
-        if isinstance(raw_input, list) and len(raw_input) == 1:
-            return _parse_input(raw_input[0])
-
-
-        if isinstance(raw_input, BaseMessage):
-            return _parse_lc_message(raw_input)
-
-        if not isinstance(raw_input, dict):
-            return _serialize(raw_input)
+        return _serialize(raw_input)
         
 
-        if _is_serialized_lc_message(raw_input):
-            message = _deserialize_lc_serialized_message(raw_input)
-            return _parse_lc_message(message)
-
-        input_value = raw_input.get("input")
-        content = raw_input.get("content")
-        inputs_value = raw_input.get("inputs")
-        question_value = raw_input.get("question")
-        query_value = raw_input.get("query")
-
-        if input_value is not None:
-            return input_value
-        if inputs_value is not None:
-            return inputs_value
-        if question_value is not None:
-            return question_value
-        if query_value is not None:
-            return query_value
-        if content is not None:
-            return content
-
-        return _serialize(raw_input)
-
     def _parse_output(raw_output: dict) -> Any:
-        if raw_output is None:
-            return None
-
-        if not isinstance(raw_output, dict):
-            return _serialize(raw_output)
-
-        agent_finish_output = raw_output.get("kwargs", {}).get("return_values", {}).get("output")
-        if agent_finish_output:
-            return agent_finish_output
-
-        lc_serialized_messages = raw_output.get("kwargs", {}).get("messages") 
-
-        if lc_serialized_messages: 
-            for message in lc_serialized_messages:
-                if _is_serialized_lc_message(message):
-                    message = _deserialize_lc_serialized_message(message)
-                    return _parse_lc_message(message)
-
-        text_value = raw_output.get("text")
-        output_value = raw_output.get("output")
-        output_text_value = raw_output.get("output_text")
-        answer_value = raw_output.get("answer")
-        result_value = raw_output.get("result")
-
-        if text_value is not None:
-            return text_value
-        if answer_value is not None:
-            return answer_value
-        if output_value is not None:
-            return output_value
-        if output_text_value is not None:
-            return output_text_value
-        if result_value is not None:
-            return result_value
-
         return _serialize(raw_output)
 
     def _is_serialized_lc_message(obj: dict) -> bool:
+        # TODO: Replace by langchain Serializable.get_lc_namespace
         try: 
             if obj['lc'] != 1:
                 return False
@@ -800,15 +744,15 @@ try:
     def _deserialize_lc_serialized_message(message: dict) -> Any:
         model = message.get("id")[3]
 
-        if model == 'AIMessage':
+        if model == 'AIMessage' or 'AIMessageChunk':
             return AIMessage.parse_obj(message["kwargs"])
-        elif model == 'FunctionMessage':
+        elif model == 'FunctionMessage' or "FunctionMessageChunk":
             return FunctionMessage.parse_obj(message["kwargs"])
-        elif model == 'HumanMessage':
+        elif model == 'HumanMessage' or "HumanMessageChunk":
             return HumanMessage.parse_obj(message["kwargs"])
-        elif model == 'SystemMessage':
+        elif model == 'SystemMessage' or "SystemMessageChunk":
             return SystemMessage.parse_obj(message["kwargs"])
-        elif model == 'ToolMessage':
+        elif model == 'ToolMessage' or "ToolMessageChunk":
             return ToolMessage.parse_obj(message["kwargs"])
 
 
@@ -1204,7 +1148,7 @@ try:
             self,
             serialized: Dict[str, Any],
             inputs: Dict[str, Any],
-            *,
+            *args,
             run_id: UUID,
             parent_run_id: Union[UUID, None] = None,
             tags: Union[List[str], None] = None,
@@ -1212,6 +1156,14 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
+                # print('\n\n\n')
+                # print('-------------')
+                # print("CHAIN START")
+                # print('inputs: ', inputs)
+                # print('args: ', args)
+                # print('metadata: ', metadata)
+                # print('kwargs: ', kwargs)
+
                 run_id_str = str(run_id)
                 if parent_run_id and spans.get(str(parent_run_id)):
                     parent = spans[str(parent_run_id)]
@@ -1264,11 +1216,19 @@ try:
         def on_chain_end(
             self,
             outputs: Dict[str, Any],
-            *,
+            *args,
             run_id: UUID,
             parent_run_id: Union[UUID, None] = None,
             **kwargs: Any,
         ) -> Any:
+            # print('\n\n\n')
+            # print('-------------')
+            # print("CHAIN END")
+            # print('output: ', outputs)
+            # print('output type: ', type(outputs))
+            # print('args: ', args)
+            # print('kwargs: ', kwargs)
+
             try:
                 span = spans.get(str(run_id))
                 if span and hasattr(span, "is_recording") and span.is_recording():
@@ -1285,6 +1245,7 @@ try:
                 )
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_chain_end: {e}")
+                logger.error(traceback.format_exc())
 
         def on_agent_finish(
             self,
