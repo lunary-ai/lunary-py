@@ -1477,6 +1477,8 @@ def get_raw_template(slug):
         os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
+    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+
     global templateCache
     now = time.time() * 1000
     cache_entry = templateCache.get(slug)
@@ -1488,8 +1490,8 @@ def get_raw_template(slug):
         'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
     }
-    
-    response = requests.get(f"{DEFAULT_API_URL}/v1/template_versions/latest?slug={slug}", headers=headers)
+
+    response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}", headers=headers)
 
     if not response.ok:
         raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
