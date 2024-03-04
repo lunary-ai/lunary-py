@@ -8,6 +8,7 @@ import traceback
 import logging
 import copy
 import json
+import pprint
 import time
 import chevron
 from pkg_resources import parse_version
@@ -704,9 +705,10 @@ try:
         if not data:
             return None
             
-        if hasattr(data, 'is_lc_serializable'):
-            if data.is_lc_serializable():
-                return data.to_json()
+        if hasattr(data, 'messages'):
+            return _serialize(data.messages)
+        if isinstance(data, BaseMessage) or isinstance(data, BaseMessageChunk):
+            return _parse_lc_message(data)
         elif isinstance(data, dict):
             return {key: _serialize(value) for key, value in data.items()}
         elif isinstance(data, list):
@@ -717,11 +719,32 @@ try:
             return dumps(data)
 
     def _parse_input(raw_input: Any) -> Any:
-        return _serialize(raw_input)
-        
+        serialized = _serialize(raw_input)
+        if isinstance(serialized, dict):
+            if serialized.get('input'):
+                return serialized["input"]
+
+        try:
+            json.dumps(serialized)
+            return serialized
+        except:
+            return 'Error parsing data'
+
+    
 
     def _parse_output(raw_output: dict) -> Any:
-        return _serialize(raw_output)
+        print(raw_output)
+        serialized = _serialize(raw_output)
+        print(serialized)
+        if isinstance(serialized, dict):
+            if serialized.get('output'):
+                return serialized["output"]
+
+        try:
+            json.dumps(serialized)
+            return serialized
+        except:
+            return 'Error parsing data'
 
     def _is_serialized_lc_message(obj: dict) -> bool:
         # TODO: Replace by langchain Serializable.get_lc_namespace
