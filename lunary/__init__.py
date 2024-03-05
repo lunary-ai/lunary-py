@@ -712,7 +712,10 @@ try:
         elif isinstance(data, dict):
             return {key: _serialize(value) for key, value in data.items()}
         elif isinstance(data, list):
-            return [_serialize(item) for item in data]
+            if len(data) == 1:
+                return _serialize(data[0])
+            else:
+                return [_serialize(item) for item in data]
         elif isinstance(data, (str, int, float, bool)):
             return data
         else:
@@ -733,9 +736,7 @@ try:
     
 
     def _parse_output(raw_output: dict) -> Any:
-        print(raw_output)
         serialized = _serialize(raw_output)
-        print(serialized)
         if isinstance(serialized, dict):
             if serialized.get('output'):
                 return serialized["output"]
