@@ -60,7 +60,7 @@ class Consumer(Thread):
                     api_url + "/v1/runs/ingest",
                     json={"events": batch},
                     headers=headers,
-                    timeout=5,
+                    timeout=30,
                 )
 
                 if verbose:

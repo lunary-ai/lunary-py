@@ -8,7 +8,10 @@ class EventQueue:
 
     def append(self, event):
         with self.lock:
-            self.events.append(event)
+            if isinstance(event, list):
+                self.events.extend(event)
+            else:
+                self.events.append(event)
 
     def get_batch(self):
         if self.lock.acquire(False): # non-blocking
