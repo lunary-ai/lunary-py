@@ -1542,38 +1542,50 @@ def render_template(slug, data = {}):
 
 def get_langchain_template(slug):
 
-    raw_template = get_raw_template(slug)
+    try:
+        from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
-    if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-        raise Exception("Template not found, are the project ID and slug correct?")
+        raw_template = get_raw_template(slug)
 
-    content = copy.deepcopy(raw_template['content'])
+        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+            raise Exception("Template not found, are the project ID and slug correct?")
 
-    def replace_double_braces(text):
-        return text.replace("{{", "{").replace("}}", "}")
+        content = copy.deepcopy(raw_template['content'])
 
-    text_mode = isinstance(content, str)
+        def replace_double_braces(text):
+            return text.replace("{{", "{").replace("}}", "}")
 
-    if text_mode:
-        # replace {{ variables }} with { variables }
-        rendered = replace_double_braces(content)
-        return rendered
+        text_mode = isinstance(content, str)
 
-    else:
+        if text_mode:
+            # replace {{ variables }} with { variables }
+            rendered = replace_double_braces(content)
 
-        # Return array of messages like that:
-        #  [
-        #     ("system", "You are a helpful AI bot. Your name is {name}."),
-        #     ("human", "Hello, how are you doing?"),
-        #     ("ai", "I'm doing well, thanks!"),
-        #     ("human", "{user_input}"),
-        # ]
+            template = PromptTemplate.from_template(rendered)
+
+            return template
+
+        else:
+
+            messages = []
+
+            # Return array of messages like that:
+            #  [
+            #     ("system", "You are a helpful AI bot. Your name is {name}."),
+            #     ("human", "Hello, how are you doing?"),
+            #     ("ai", "I'm doing well, thanks!"),
+            #     ("human", "{user_input}"),
+            # ]
+
+            for message in content:
+                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+
+            template = ChatPromptTemplate.from_messages(messages)
+
+            return template
         
-        messages = []
-        for message in content:
-            messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
-
-        return messages
+    except Exception as e:
+        print(f"Lunary: Error fetching template: {e}")
 
 import humps
 
