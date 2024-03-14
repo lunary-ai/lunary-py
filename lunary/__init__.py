@@ -64,11 +64,12 @@ def clean_nones(value):
     else:
         return value
 
-def get_parent_run_id(parent_run_id: str, run_type: str):
+def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str):
     if parent_run_id == "None":
         parent_run_id = None
 
     if parent_run_id is not None:
+        return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
         return str(parent_run_id)
 
     if parent_ctx.get() and run_type != "thread":
@@ -122,9 +123,8 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    parent_run_id = get_parent_run_id(parent_run_id, run_type)
+    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id)
     
-
     event = {
         "event": event_name,
         "type": run_type,
@@ -134,7 +134,7 @@ def track_event(
         "tags": tags or tags_ctx.get(),
         "threadTags": thread_tags,
         "runId": str(create_uuid_from_string(str(run_id) + str(APP_ID))), # We need generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
-        "parentRunId": str(create_uuid_from_string(str(parent_run_id) + str(APP_ID))), 
+        "parentRunId": parent_run_id, 
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
         "message": message,
         "input": input,
