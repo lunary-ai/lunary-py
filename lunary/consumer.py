@@ -11,10 +11,10 @@ DEFAULT_API_URL = "https://api.lunary.ai"
 
 
 class Consumer(Thread):
-    def __init__(self, event_queue):
+    def __init__(self, event_queue, app_id=None):
         self.running = True
         self.event_queue = event_queue
-
+        self.app_id = app_id
 
         Thread.__init__(self, daemon=True)
         atexit.register(self.stop)
@@ -41,7 +41,12 @@ class Consumer(Thread):
             or DEFAULT_API_URL
         )
 
-        token = (os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID"))
+        token = (
+            self.app_id
+            or os.environ.get("LUNARY_PUBLIC_KEY") 
+            or os.environ.get("LUNARY_APP_ID") 
+            or os.environ.get("LLMONITOR_APP_ID")
+        )
 
         if len(batch) > 0:
             if verbose:
