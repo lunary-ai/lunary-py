@@ -4,7 +4,7 @@ parent_ctx = ContextVar("parent_ctx", default=None)
 
 class ParentContextManager:
     def __init__(self, message_id: str):
-        parent_ctx.set(message_id)
+        parent_ctx.set({"message_id": message_id, "retrieved": False})
 
     def __enter__(self):
         pass
@@ -15,3 +15,10 @@ class ParentContextManager:
 
 def parent(id: str) -> ParentContextManager:
     return ParentContextManager(id)
+
+def get_parent():
+  parent = parent_ctx.get()
+  if parent and parent.get("retrieved", False) == False:
+    parent_ctx.set({"message_id": parent["message_id"], "retrieved": True})
+    return parent.get("message_id", None)
+  return None

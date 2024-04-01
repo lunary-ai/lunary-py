@@ -28,7 +28,7 @@ from .consumer import Consumer
 # DO NOT REMOVE `identify` import
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
-from .parent import parent_ctx, parent # DO NOT REMOVE `parent` import
+from .parent import parent_ctx, parent, get_parent # DO NOT REMOVE `parent` import
 from .project import project_ctx # DO NOT REMOVE `project` import
 from .thread import Thread
 
@@ -72,8 +72,9 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
     if is_openai:
         return str(parent_run_id)
 
-    if parent_ctx.get() and run_type != "thread":
-        return str(create_uuid_from_string(str(parent_ctx.get()) + str(app_id)))
+    parent_from_ctx = get_parent()
+    if parent_from_ctx and run_type != "thread":
+        return str(create_uuid_from_string(str(parent_from_ctx) + str(app_id)))
 
     if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
        return str(create_uuid_from_string(str(run_ctx.get()) + str(app_id)))
@@ -119,7 +120,7 @@ def track_event(
 ):
     # Load here in case load_dotenv done after
     APP_ID = (
-        project_ctx.get() or app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
+        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     VERBOSE = os.environ.get(
@@ -128,7 +129,6 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    print(parent_ctx.get())
     parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai)
     
     event = {
