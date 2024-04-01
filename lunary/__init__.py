@@ -29,6 +29,7 @@ from .consumer import Consumer
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 from .parent import parent_ctx, parent # DO NOT REMOVE `parent` import
+from .project import project_ctx # DO NOT REMOVE `project` import
 from .thread import Thread
 
 DEFAULT_API_URL = "https://api.lunary.ai"
@@ -64,19 +65,22 @@ def clean_nones(value):
     else:
         return value
 
-def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str):
+def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: str, is_openai: bool):
     if parent_run_id == "None":
         parent_run_id = None
 
-    if parent_run_id is not None:
-        return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
+    if is_openai:
         return str(parent_run_id)
 
     if parent_ctx.get() and run_type != "thread":
-        return str(parent_ctx.get())
-    
+        return str(create_uuid_from_string(str(parent_ctx.get()) + str(app_id)))
+
     if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
-       return str(run_ctx.get())
+       return str(create_uuid_from_string(str(run_ctx.get()) + str(app_id)))
+
+    if parent_run_id is not None:
+        return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
+
 
 def create_uuid_from_string(seed_string):
     seed_bytes = seed_string.encode('utf-8')
@@ -110,11 +114,12 @@ def track_event(
     metadata=None,
     runtime=None,
     app_id=None,
-    callback_queue=None
+    callback_queue=None,
+    is_openai=False
 ):
     # Load here in case load_dotenv done after
     APP_ID = (
-        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
+        project_ctx.get() or app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     VERBOSE = os.environ.get(
@@ -123,7 +128,8 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id)
+    print(parent_ctx.get())
+    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai)
     
     event = {
         "event": event_name,
@@ -362,6 +368,7 @@ def wrap(
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                     extra=kwargs.get("extra", None),
                     template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
+                    is_openai=True
                 )
             except Exception as e:
                 handle_internal_error(e)
