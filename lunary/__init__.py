@@ -21,6 +21,7 @@ from typing import Optional
 from .parsers import (
     default_input_parser,
     default_output_parser,
+    filter_params
 )
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
@@ -113,6 +114,7 @@ def track_event(
     extra=None,
     template_id=None,
     metadata=None,
+    params=None,
     runtime=None,
     app_id=None,
     callback_queue=None,
@@ -146,11 +148,11 @@ def track_event(
         "input": input,
         "output": output,
         "error": error,
-        "extra": extra,
         "feedback": feedback,
         "runtime": runtime or "lunary-py",
         "tokensUsage": token_usage,
         "metadata": metadata,
+        "params": params,
         "templateId": template_id,
         "appId": APP_ID
     }
@@ -347,6 +349,8 @@ def wrap(
         with tracer.start_as_current_span(uuid.uuid4()) as run:
             output = None
             try:
+                params = filter_params(kwargs)
+                metadata = kwargs.pop("metadata", None)
                 run_id = trace.get_current_span().context.span_id
                 parent_run_id = kwargs.pop("parent", None) or getattr(
                     trace.get_current_span().parent, "span_id", None
@@ -365,6 +369,8 @@ def wrap(
                     user_props=kwargs.pop("user_props", None)
                     or user_props
                     or user_props_ctx.get(),
+                    params=params,
+                    metadata=metadata,
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                     extra=kwargs.get("extra", None),
                     template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
@@ -431,6 +437,8 @@ def async_wrap(
             with tracer.start_as_current_span(uuid.uuid4()) as run:
                 output = None
                 try:
+                    params = filter_params(kwargs)
+                    metadata = kwargs.pop("metadata", None)
                     run_id = trace.get_current_span().context.span_id
                     parent_run_id = getattr(
                         trace.get_current_span().parent, "span_id", None
@@ -450,6 +458,8 @@ def async_wrap(
                         user_props=kwargs.pop("user_props", None)
                                    or user_props
                                    or user_props_ctx.get(),
+                        params=params,
+                        metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         extra=parsed_input.get("extra", None),
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
@@ -983,12 +993,7 @@ try:
                 if not name and "anthropic" in params.get("_type"):
                     name = "claude-2"
 
-                extra = {
-                    param: params.get(param)
-                    for param in PARAMS_TO_CAPTURE
-                    if params.get(param) is not None
-                }
-
+                params = filter_params(params)
                 input = _parse_input(prompts)
 
                 self.__track_event(
@@ -1000,8 +1005,8 @@ try:
                     name=name,
                     input=input,
                     tags=tags,
-                    extra=extra,
                     metadata=metadata,
+                    params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
                     callback_queue=self.queue
@@ -1062,12 +1067,7 @@ try:
                 if not name and "anthropic" in params.get("_type"):
                     name = "claude-2"
 
-                extra = {
-                    param: params.get(param)
-                    for param in PARAMS_TO_CAPTURE
-                    if params.get(param) is not None
-                }
-
+                params = filter_params(params)
                 input = _parse_lc_messages(messages[0])
 
                 self.__track_event(
@@ -1079,14 +1079,16 @@ try:
                     name=name,
                     input=input,
                     tags=tags,
-                    extra=extra,
                     metadata=metadata,
+                    params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
                     callback_queue=self.queue
                 )
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_chat_model_start: {e}")
+                logger.error(traceback.format_exc())
+
 
         def on_llm_end(
             self,
@@ -1420,7 +1422,6 @@ try:
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_retriever_start: {e}")
 
-
         def on_retriever_end(
             self,
             documents: Sequence[Document],
@@ -1450,7 +1451,6 @@ try:
             except Exception as e:
                 logger.error(f"[Lunary] An error occurred in on_retriever_end: {e}")
             
-
         def on_retriever_error(
             self,
             error: BaseException,
