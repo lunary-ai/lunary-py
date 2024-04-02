@@ -4,8 +4,8 @@ version = "1.0.1"
 description = "Observability, analytics and evaluations for AI agents and chatbots."
 authors = ["lunary <hello@lunary.ai>"]
 readme = "README.md"
-repository = "https://github.com/lunary/lunary.ai/"
-documentation = "https://lunary.ai/docs/py/usage"
+repository = "https://github.com/lunary-ai/lunary-py"
+documentation = "https://lunary.ai/docs/py"
 keywords = ["Lunary", "lunary.ai", "Langchain", "AI", "Analytics", "Monitoring"]
 
 [tool.poetry.dependencies]
