@@ -132,8 +132,7 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai)
-    
+    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=APP_ID, run_id=run_id, is_openai=is_openai) 
     event = {
         "event": event_name,
         "type": run_type,
