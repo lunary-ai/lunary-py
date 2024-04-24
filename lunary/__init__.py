@@ -11,6 +11,7 @@ import json
 import time
 import chevron
 import hashlib
+import aiohttp
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
@@ -1526,9 +1527,38 @@ def get_raw_template(slug):
     templateCache[slug] = {'timestamp': now, 'data': data}
     return data
 
+async def get_raw_template_async(slug):
+    token = (
+        os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
+            "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+    )
+    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+
+    global templateCache
+    now = time.time() * 1000
+    cache_entry = templateCache.get(slug)
+
+    if cache_entry and now - cache_entry['timestamp'] < 60000:
+        return cache_entry['data']
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{api_url}/v1/template_versions/latest?slug={slug}", headers=headers) as response:
+            if not response.ok:
+                raise Exception(f"Lunary: Error fetching template: {response.status} - {await response.text()}")
+
+            data = await response.json()
+
+    templateCache[slug] = {'timestamp': now, 'data': data}
+    return data
+
+
 
 def render_template(slug, data = {}):
-
     raw_template = get_raw_template(slug)
 
     if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
@@ -1565,8 +1595,46 @@ def render_template(slug, data = {}):
 
         return result
 
-def get_langchain_template(slug):
+async def render_template_async(slug, data={}):
+    raw_template = await get_raw_template_async(slug)
 
+    if raw_template.get('message') == 'Template not found, is the project ID correct?':
+        raise Exception("Template not found, are the project ID and slug correct?")
+
+    template_id = copy.deepcopy(raw_template['id'])
+    content = copy.deepcopy(raw_template['content'])
+    extra = copy.deepcopy(raw_template['extra'])
+
+    text_mode = isinstance(content, str)
+
+    # extra_headers is safe with OpenAI to be used to pass value
+    extra_headers = {
+        "Template-Id": str(template_id)
+    }
+
+    result = None
+    if text_mode:
+        rendered = chevron.render(content, data)
+        result = {
+            "text": rendered,
+            "extra_headers": extra_headers,
+            **extra
+        }
+        return result
+    else:
+        messages = []
+        for message in content:
+            message["content"] = chevron.render(message["content"], data)
+            messages.append(message)
+        result = {
+            "messages": messages,
+            "extra_headers": extra_headers,
+            **extra
+        }
+
+        return result
+
+def get_langchain_template(slug):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
@@ -1609,6 +1677,51 @@ def get_langchain_template(slug):
 
             return template
         
+    except Exception as e:
+        print(f"Lunary: Error fetching template: {e}")
+
+async def get_langchain_template_async(slug):
+    try:
+        from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+
+        raw_template = await get_raw_template_async(slug)
+
+        if raw_template.get('message') == 'Template not found, is the project ID correct?':
+            raise Exception("Template not found, are the project ID and slug correct?")
+
+        content = copy.deepcopy(raw_template['content'])
+
+        def replace_double_braces(text):
+            return text.replace("{{", "{").replace("}}", "}")
+
+        text_mode = isinstance(content, str)
+
+        if text_mode:
+            # replace {{ variables }} with { variables }
+            rendered = replace_double_braces(content)
+
+            template = PromptTemplate.from_template(rendered)
+
+            return template
+
+        else:
+            messages = []
+
+            # Return array of messages like that:
+            #  [
+            #     ("system", "You are a helpful AI bot. Your name is {name}."),
+            #     ("human", "Hello, how are you doing?"),
+            #     ("ai", "I'm doing well, thanks!"),
+            #     ("human", "{user_input}"),
+            # ]
+
+            for message in content:
+                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+
+            template = ChatPromptTemplate.from_messages(messages)
+
+            return template
+
     except Exception as e:
         print(f"Lunary: Error fetching template: {e}")
 
