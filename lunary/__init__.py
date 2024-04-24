@@ -71,9 +71,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
     if parent_run_id == "None":
         parent_run_id = None
 
-    if is_openai:
-        return str(parent_run_id)
-
     parent_from_ctx = get_parent()
     if parent_from_ctx and run_type != "thread":
         return str(create_uuid_from_string(str(parent_from_ctx) + str(app_id)))
