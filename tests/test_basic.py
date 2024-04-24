@@ -1,14 +1,16 @@
 import lunary
 from openai import OpenAI
 import os
+import pytest
 
-def test_monitor():
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+@pytest.fixture
+def client():
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def test_monitor(client):
     lunary.monitor(client)
-    # Add assertions to verify the expected behavior of the monitor function
 
-def test_identify_user():
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+def test_identify_user(client):
     with lunary.users.identify("user1", user_props={"email": "123@gle.com"}):
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -17,8 +19,7 @@ def test_identify_user():
         assert completion.choices[0].message.content is not None
 
 @lunary.agent("My great agent", user_id="123", tags=["test", "test2"])
-def my_agent(a, b, c, test, test2):
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+def my_agent(client, a, b, c, test, test2):
     tool1_output = tool1("hello")
     output = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -36,8 +37,8 @@ def tool1(a):
 def tool2():
     return "Output 2"
 
-def test_my_agent():
-    result = my_agent(1, 2, 3, test="sdkj", test2="sdkj")
+def test_my_agent(client):
+    result = my_agent(client, 1, 2, 3, test="sdkj", test2="sdkj")
     assert "Agent output: Output 1, Output 2" in result
 
 def test_tool1():
