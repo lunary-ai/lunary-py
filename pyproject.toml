@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "lunary"
-version = "1.0.1"
+version = "1.0.6"
 description = "Observability, analytics and evaluations for AI agents and chatbots."
 authors = ["lunary <hello@lunary.ai>"]
 readme = "README.md"
-repository = "https://github.com/lunary/lunary.ai/"
-documentation = "https://lunary.ai/docs/py/usage"
+repository = "https://github.com/lunary-ai/lunary-py"
+documentation = "https://lunary.ai/docs/py"
 keywords = ["Lunary", "lunary.ai", "Langchain", "AI", "Analytics", "Monitoring"]
 
 [tool.poetry.dependencies]
@@ -18,6 +18,7 @@ opentelemetry-sdk = "^1.21.0"
 packaging = "^23.2"
 chevron = "^0.14.0"
 pyhumps = "^3.8.0"
+aiohttp = "^3.9.5"
 
 [tool.poetry.group.dev.dependencies]
 openai = "^1.12.0"
