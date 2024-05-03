@@ -177,6 +177,10 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
 
         for chunk in stream:
             tokens += 1
+            if not chunk.choices:
+                # Azure
+                continue
+
             choice = chunk.choices[0]
             index = choice.index
 
@@ -261,6 +265,10 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
 
     async for chunk in stream:
         tokens += 1
+        if not chunk.choices:
+            # Happens with Azure
+            continue
+
         choice = chunk.choices[0]
         index = choice.index
 
@@ -567,7 +575,7 @@ def monitor(object):
                         "[Lunary] Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
                     )
 
-            elif name == "AsyncOpenAI":
+            elif name == "AsyncOpenAI" or name == "AsyncAzureOpenAI":
                 object.chat.completions.create = async_wrap(
                     object.chat.completions.create,
                     "llm",

@@ -15,13 +15,17 @@ client = AzureOpenAI(
 
 lunary.monitor(client)
 
-completion = client.chat.completions.create(
+stream = client.chat.completions.create(
     model=RESOURCE_NAME,
+    stream=True,
     messages=[
         {
             "role": "user",
-            "content": "How do I output all files in a directory using Python?",
+            "content": "Say sync stream",
         },
     ],
 )
-print(completion.to_json())
+for chunk in stream:
+    if not chunk.choices:
+      continue
+    print(chunk.choices[0].delta.content, end="")
