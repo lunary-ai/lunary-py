@@ -379,7 +379,6 @@ def wrap(
                     params=params,
                     metadata=metadata,
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                    params=kwargs.get("extra", None),
                     template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     is_openai=True
                 )
@@ -468,7 +467,6 @@ def async_wrap(
                         params=params,
                         metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        params=parsed_input.get("extra", None),
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
@@ -709,7 +707,6 @@ try:
         "max_tokens",
         "logit_bias",
     ]
-
 
     class UserContextManager:
         """Context manager for Lunary user context."""
