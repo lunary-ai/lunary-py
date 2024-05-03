@@ -109,7 +109,6 @@ def track_event(
     timestamp=None,
     thread_tags=None,
     feedback=None,
-    extra=None,
     template_id=None,
     metadata=None,
     params=None,
@@ -380,7 +379,7 @@ def wrap(
                     params=params,
                     metadata=metadata,
                     tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                    extra=kwargs.get("extra", None),
+                    params=kwargs.get("extra", None),
                     template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     is_openai=True
                 )
@@ -469,7 +468,7 @@ def async_wrap(
                         params=params,
                         metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        extra=parsed_input.get("extra", None),
+                        params=parsed_input.get("extra", None),
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
@@ -535,7 +534,7 @@ def async_wrap(
                                    or user_props
                                    or user_props_ctx.get(),
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        extra=parsed_input.get("extra", None),
+                        params=parsed_input.get("extra", None),
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
