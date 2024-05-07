@@ -75,9 +75,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
     if parent_from_ctx and run_type != "thread":
         return str(create_uuid_from_string(str(parent_from_ctx) + str(app_id)))
 
-    if run_ctx.get() is not None and str(run_id) != str(run_ctx.get()):
-       return str(create_uuid_from_string(str(run_ctx.get()) + str(app_id)))
-
     if parent_run_id is not None:
         return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
 
@@ -128,7 +125,10 @@ def track_event(
     if not APP_ID:
         return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
+    run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
     parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=APP_ID, run_id=run_id, is_openai=is_openai) 
+    run_id = str(create_uuid_from_string(str(run_id) + str(APP_ID)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+
     event = {
         "event": event_name,
         "type": run_type,
@@ -137,7 +137,7 @@ def track_event(
         "userProps": user_props or user_props_ctx.get(),
         "tags": tags or tags_ctx.get(),
         "threadTags": thread_tags,
-        "runId": str(create_uuid_from_string(str(run_id) + str(APP_ID))), # We need generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        "runId": run_id,
         "parentRunId": parent_run_id, 
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
         "message": message,
