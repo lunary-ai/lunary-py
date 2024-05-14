@@ -1,8 +1,6 @@
 import lunary
-
 from openai import OpenAI
 import os
-from dotenv import load_dotenv
 
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
@@ -26,17 +24,17 @@ def my_agent(a, b, c, test, test2):
         messages=[{"role": "user", "content": "Hello world"}],
     )
     print(output)
-    tool2()
+    tool2("hello")
     return "Agent output"
 
 
 @lunary.tool(name="tool 1", user_id="123")
-def tool1(a):
+def tool1(input):
     return "Output 1"
 
 
 @lunary.tool()
-def tool2():
+def tool2(input):
     return "Output 2"
 
 
