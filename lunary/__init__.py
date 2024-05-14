@@ -167,7 +167,7 @@ def track_event(
 
         if VERBOSE:
             event_copy = clean_nones(copy.deepcopy(event))
-            print("[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
+            print("\n[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
         
     except Exception as e:
         print("[Lunary]: Error in `track_event`", e,  traceback.format_exc())
