@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lunary"
-version = "1.0.14"
+version = "1.0.15"
 description = "Observability, analytics and evaluations for AI agents and chatbots."
 authors = ["lunary <hello@lunary.ai>"]
 readme = "README.md"
@@ -19,6 +19,7 @@ packaging = "^23.2"
 chevron = "^0.14.0"
 pyhumps = "^3.8.0"
 aiohttp = "^3.9.5"
+jsonpickle = "^3.0.4"
 
 [tool.poetry.group.dev.dependencies]
 openai = "^1.12.0"

@@ -4,6 +4,7 @@ import requests
 import os
 import logging
 from threading import Thread
+import jsonpickle
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +62,10 @@ class Consumer(Thread):
                     'Content-Type': 'application/json'
                 }
             
+                data = jsonpickle.encode({"events": batch}, unpicklable=False)
                 response = requests.post(
                     api_url + "/v1/runs/ingest",
-                    json={"events": batch},
+                    data=data,
                     headers=headers,
                     verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
 

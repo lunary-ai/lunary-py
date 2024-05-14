@@ -7,16 +7,17 @@ import warnings
 import traceback
 import logging
 import copy
-import json
 import time
 import chevron
 import hashlib
 import aiohttp
+import copy
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Optional
+import jsonpickle
 
 
 from .parsers import (
@@ -50,22 +51,27 @@ provider = TracerProvider()
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("lunary")
 
+VERBOSE = os.environ.get(
+    "LUNARY_VERBOSE") or os.environ.get("LLMONITOR_VERBOSE")
 
 def clean_nones(value):
     """
     Recursively remove all None values from dictionaries and lists, and returns
     the result as a new dictionary or list.
     """
-    if isinstance(value, list):
-        return [clean_nones(x) for x in value if x is not None]
-    elif isinstance(value, dict):
-        return {
-            key: clean_nones(val)
-            for key, val in value.items()
-            if val is not None
-        }
-    else:
-        return value
+    try:
+        if isinstance(value, list):
+            return [clean_nones(x) for x in value if x is not None]
+        elif isinstance(value, dict):
+            return {
+                key: clean_nones(val)
+                for key, val in value.items()
+                if val is not None
+            }
+        else:
+            return value
+    except Exception as e:
+        return value  
 
 def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: str, is_openai: bool):
     if parent_run_id == "None":
@@ -114,53 +120,59 @@ def track_event(
     callback_queue=None,
     is_openai=False
 ):
-    # Load here in case load_dotenv done after
-    APP_ID = (
-        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
-            "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
-    )
-    VERBOSE = os.environ.get(
-        "LUNARY_VERBOSE") or os.environ.get("LLMONITOR_VERBOSE")
+    try:
+        # Load here in case load_dotenv done after
+        APP_ID = (
+            app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
+                "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
+        )
 
-    if not APP_ID:
-        return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
-    parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=APP_ID, run_id=run_id, is_openai=is_openai) 
-    run_id = str(create_uuid_from_string(str(run_id) + str(APP_ID)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        if not APP_ID:
+            return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-    event = {
-        "event": event_name,
-        "type": run_type,
-        "name": name,
-        "userId": user_id or user_ctx.get(),
-        "userProps": user_props or user_props_ctx.get(),
-        "tags": tags or tags_ctx.get(),
-        "threadTags": thread_tags,
-        "runId": run_id,
-        "parentRunId": parent_run_id, 
-        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
-        "message": message,
-        "input": input,
-        "output": output,
-        "error": error,
-        "feedback": feedback,
-        "runtime": runtime or "lunary-py",
-        "tokensUsage": token_usage,
-        "metadata": metadata,
-        "params": params,
-        "templateId": template_id,
-        "appId": APP_ID
-    }
+        run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
+        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=APP_ID, run_id=run_id, is_openai=is_openai) 
+        run_id = str(create_uuid_from_string(str(run_id) + str(APP_ID)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
 
-    if VERBOSE:
-        print("[Lunary] Add event:", json.dumps(clean_nones(event), indent=4))
-        print("\n")
+        event = {
+            "event": event_name,
+            "type": run_type,
+            "name": name,
+            "userId": user_id or user_ctx.get(),
+            "userProps": user_props or user_props_ctx.get(),
+            "tags": tags or tags_ctx.get(),
+            "threadTags": thread_tags,
+            "runId": run_id,
+            "parentRunId": parent_run_id, 
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "message": message,
+            "input": input,
+            "output": output,
+            "error": error,
+            "feedback": feedback,
+            "runtime": runtime or "lunary-py",
+            "tokensUsage": token_usage,
+            "metadata": metadata,
+            "params": params,
+            "templateId": template_id,
+            "appId": APP_ID
+        }
 
-    if callback_queue is not None:
-        callback_queue.append(event)
-    else:
-        queue.append(event)
+
+        if callback_queue is not None:
+            callback_queue.append(event)
+        else:
+            queue.append(event)
+
+        if VERBOSE:
+            event_copy = clean_nones(copy.deepcopy(event))
+            print("[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
+        
+    except Exception as e:
+        print("[Lunary]: Error in `track_event`", e,  traceback.format_exc())
+
+    
 
 
 def handle_internal_error(e):
@@ -1016,10 +1028,10 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                warnings.warn(
-                    f"""[Lunary] An error occurred in on_llm_start:
-                    {e}\n{traceback.format_exc()}"""
-                )
+                logger.error(f"[Lunary] An error occurred in `on_llm_start`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
+
 
         def on_chat_model_start(
             self,
@@ -1090,8 +1102,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chat_model_start: {e}")
-                logger.error(traceback.format_exc())
+                logger.error(f"[Lunary] An error occurred in `on_chat_model_start`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
 
         def on_llm_end(
@@ -1132,7 +1145,10 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_llm_end: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_llm_end`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
+
 
         def on_tool_start(
             self,
@@ -1177,7 +1193,10 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_tool_start: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_tool_start`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
+
 
         def on_tool_end(
             self,
@@ -1201,7 +1220,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_tool_end: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_tool_end`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_chain_start(
             self,
@@ -1263,7 +1284,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_start: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_chain_start`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_chain_end(
             self,
@@ -1289,8 +1312,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_end: {e}")
-                logger.error(traceback.format_exc())
+                logger.error(f"[Lunary] An error occurred in `on_chain_end`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_agent_finish(
             self,
@@ -1315,7 +1339,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_agent_finish: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_agent_finish`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_chain_error(
             self,
@@ -1338,7 +1364,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_chain_error: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_chain_error`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_tool_error(
             self,
@@ -1361,7 +1389,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_tool_error: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_tool_error`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_llm_error(
             self,
@@ -1384,7 +1414,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_llm_error: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_llm_error`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_retriever_start(
             self,
@@ -1424,7 +1456,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_retriever_start: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_retriever_start`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
         def on_retriever_end(
             self,
@@ -1453,7 +1487,9 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_retriever_end: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_retriever_end`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
             
         def on_retriever_error(
             self,
@@ -1474,9 +1510,12 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in on_retriever_error: {e}")
+                logger.error(f"[Lunary] An error occurred in `on_retriever_error`: {e}")
+                if VERBOSE:
+                    logger.error(traceback.format_exc())
 
 except Exception as e:
+    # Do not raise error for users that do not have Langchain installed 
     pass
 
 
