@@ -65,6 +65,7 @@ class Consumer(Thread):
                     api_url + "/v1/runs/ingest",
                     json={"events": batch},
                     headers=headers,
+                    verify=os.environ.get("DISABLE_SSL_VERIFY", True)
                 )
 
                 if verbose:
