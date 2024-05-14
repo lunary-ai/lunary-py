@@ -66,7 +66,6 @@ class Consumer(Thread):
                     json={"events": batch},
                     headers=headers,
                     verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
-                )
 
                 if verbose:
                     logging.info("[Lunary] Events sent.", response.status_code)
