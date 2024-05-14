@@ -774,11 +774,7 @@ try:
             if serialized.get('input'):
                 return serialized["input"]
 
-        try:
-            json.dumps(serialized)
-            return serialized
-        except:
-            return 'Error parsing data'
+        return serialized
 
     
 
@@ -788,11 +784,7 @@ try:
             if serialized.get('output'):
                 return serialized["output"]
 
-        try:
-            json.dumps(serialized)
-            return serialized
-        except:
-            return 'Error parsing data'
+        return serialized
 
     def _is_serialized_lc_message(obj: dict) -> bool:
         # TODO: Replace by langchain Serializable.get_lc_namespace
