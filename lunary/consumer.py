@@ -67,7 +67,7 @@ class Consumer(Thread):
                     api_url + "/v1/runs/ingest",
                     data=data,
                     headers=headers,
-                    verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
+                    verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
 
                 if verbose:
                     logging.info("[Lunary] Events sent.", response.status_code)

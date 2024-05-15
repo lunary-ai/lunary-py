@@ -1551,7 +1551,7 @@ def get_raw_template(slug):
 
     response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}", 
                             headers=headers,  
-                            verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
+                            verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
     if not response.ok:
         raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
 
@@ -1775,7 +1775,7 @@ def get_dataset(slug: str):
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = requests.get(url, headers=headers, verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
+        response = requests.get(url, headers=headers, verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
         if response.ok:
             dataset = response.json()
             dataset = humps.decamelize(dataset)
@@ -1819,7 +1819,7 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         if tags is not None:
             data["tags"] = tags
 
-        response = requests.post(url, headers=headers, json=data, verify=False if os.environ.get("DISABLE_SSL_VERIFY") else True)
+        response = requests.post(url, headers=headers, json=data, verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
         if response.status_code == 500:
             error_message = response.json().get('message')
             raise Exception(f"[Lunary]: Evaluation error: {error_message}")
