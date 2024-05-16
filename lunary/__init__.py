@@ -1765,8 +1765,8 @@ class DatasetItem:
             for key, value in d.items():
                 setattr(self, key, value)
 
-def get_dataset(slug: str):
-    token = os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+def get_dataset(slug: str, app_id=None):
+    token = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
     try:
@@ -1793,8 +1793,8 @@ def get_dataset(slug: str):
 
 
 
-def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None):
-    token = os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
+def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None):
+    token = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
 
     try:
