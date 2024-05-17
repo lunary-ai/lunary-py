@@ -949,10 +949,8 @@ try:
                 )
                 self.__has_valid_config = False
             
-            self.queue = EventQueue()
-            self.consumer = Consumer(self.queue, self.__app_id)
-            self.consumer.start()
-
+            self.queue = queue 
+            self.consumer = consumer 
 
             if self.__has_valid_config is False:
                 return None
@@ -1530,9 +1528,9 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
 
 templateCache = {}
 
-def get_raw_template(slug):
+def get_raw_template(slug, app_id=None):
     token = (
-        os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
+        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
             "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
     )
     api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
