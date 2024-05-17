@@ -1,10 +1,13 @@
 import threading
-
+from .consumer import Consumer
+from contextvars import ContextVar
 
 class EventQueue:
     def __init__(self):
         self.lock = threading.Lock()
         self.events = []
+        self.consumer = Consumer(self)
+        self.consumer.start()
 
     def append(self, event):
         with self.lock:

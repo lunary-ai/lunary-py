@@ -1,17 +1,5 @@
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.trace import set_span_in_context
-from opentelemetry import trace
-import uuid
-import os
-import warnings
-import traceback
-import logging
-import copy
-import time
-import chevron
-import hashlib
-import aiohttp
-import copy
+import uuid, os, warnings, traceback, logging, copy, time, chevron, hashlib, aiohttp, copy
+
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
@@ -19,6 +7,9 @@ from datetime import datetime, timezone
 from typing import Optional
 import jsonpickle
 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import set_span_in_context
+from opentelemetry import trace
 
 from .parsers import (
     default_input_parser,
@@ -27,13 +18,12 @@ from .parsers import (
 )
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
-from .consumer import Consumer
-# DO NOT REMOVE `identify` import
+from .thread import Thread
+
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 from .parent import parent_ctx, parent, get_parent # DO NOT REMOVE `parent` import
 from .project import project_ctx # DO NOT REMOVE `project` import
-from .thread import Thread
 
 DEFAULT_API_URL = "https://api.lunary.ai"
 
@@ -41,11 +31,9 @@ logger = logging.getLogger(__name__)
 
 run_ctx = ContextVar("run_ids", default=None)
 
-queue = EventQueue()
-consumer = Consumer(queue)
-
-consumer.start()
-
+event_queue_ctx = ContextVar("event_queue_ctx")
+event_queue_ctx.set(EventQueue())
+queue = event_queue_ctx.get() 
 
 provider = TracerProvider()
 trace.set_tracer_provider(provider)
@@ -709,7 +697,7 @@ try:
         "top_k",
         "stop",
         "presence_penalty",
-        "frequence_penalty",
+        "frequency_penalty",
         "seed",
         "function_call",
         "functions",
@@ -950,7 +938,6 @@ try:
                 self.__has_valid_config = False
             
             self.queue = queue 
-            self.consumer = consumer 
 
             if self.__has_valid_config is False:
                 return None
@@ -1465,14 +1452,14 @@ try:
                     span.end()
 
                 # only report the metadata
-                doc_metadatas = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
+                doc_metadata = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
 
                 self.__track_event(
                     "retriever",
                     "end",
                     run_id=run_id_str,
                     parent_run_id=parent_run_id,
-                    output=doc_metadatas,
+                    output=doc_metadata,
                     app_id=self.__app_id,
                     callback_queue=self.queue
                 )
