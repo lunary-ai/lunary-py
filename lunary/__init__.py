@@ -155,10 +155,10 @@ def track_event(
 
         if VERBOSE:
             event_copy = clean_nones(copy.deepcopy(event))
-            print("\n[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
+            logger.info("\n[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
         
     except Exception as e:
-        print("[Lunary]: Error in `track_event`", e,  traceback.format_exc())
+        logger.exception("[Lunary]: Error in `track_event`", e)
 
     
 
@@ -774,39 +774,6 @@ try:
 
         return serialized
 
-    def _is_serialized_lc_message(obj: dict) -> bool:
-        # TODO: Replace by langchain Serializable.get_lc_namespace
-        try: 
-            if obj['lc'] != 1:
-                return False
-            
-            if len(obj['id']) < 4:
-                return False
-
-            
-            if obj['id'][:3] != ['langchain', 'schema', 'messages']:
-                return False
-            
-
-            return True
-        except Exception:
-            return False 
-
-    def _deserialize_lc_serialized_message(message: dict) -> Any:
-        model = message.get("id")[3]
-
-        if model == 'AIMessage' or 'AIMessageChunk':
-            return AIMessage.parse_obj(message["kwargs"])
-        elif model == 'FunctionMessage' or "FunctionMessageChunk":
-            return FunctionMessage.parse_obj(message["kwargs"])
-        elif model == 'HumanMessage' or "HumanMessageChunk":
-            return HumanMessage.parse_obj(message["kwargs"])
-        elif model == 'SystemMessage' or "SystemMessageChunk":
-            return SystemMessage.parse_obj(message["kwargs"])
-        elif model == 'ToolMessage' or "ToolMessageChunk":
-            return ToolMessage.parse_obj(message["kwargs"])
-
-
 
     def _parse_lc_role(
         role: str,
@@ -1005,9 +972,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_llm_start`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_llm_start`: {e}")
 
 
         def on_chat_model_start(
@@ -1079,9 +1044,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_chat_model_start`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_chat_model_start`: {e}")
 
 
         def on_llm_end(
@@ -1122,9 +1085,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_llm_end`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_llm_end`: {e}")
 
 
         def on_tool_start(
@@ -1170,9 +1131,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_tool_start`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_tool_start`: {e}")
 
 
         def on_tool_end(
@@ -1197,9 +1156,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_tool_end`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_tool_end`: {e}")
 
         def on_chain_start(
             self,
@@ -1261,9 +1218,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_chain_start`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_chain_start`: {e}")
 
         def on_chain_end(
             self,
@@ -1289,9 +1244,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_chain_end`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_chain_end`: {e}")
 
         def on_agent_finish(
             self,
@@ -1316,9 +1269,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_agent_finish`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_agent_finish`: {e}")
 
         def on_chain_error(
             self,
@@ -1341,9 +1292,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_chain_error`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_chain_error`: {e}")
 
         def on_tool_error(
             self,
@@ -1366,9 +1315,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_tool_error`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_tool_error`: {e}")
 
         def on_llm_error(
             self,
@@ -1391,9 +1338,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_llm_error`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_llm_error`: {e}")
 
         def on_retriever_start(
             self,
@@ -1433,9 +1378,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_retriever_start`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_retriever_start`: {e}")
 
         def on_retriever_end(
             self,
@@ -1464,9 +1407,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_retriever_end`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_retriever_end`: {e}")
             
         def on_retriever_error(
             self,
@@ -1487,9 +1428,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.error(f"[Lunary] An error occurred in `on_retriever_error`: {e}")
-                if VERBOSE:
-                    logger.error(traceback.format_exc())
+                logger.exception(f"[Lunary] An error occurred in `on_retriever_error`: {e}")
 
 except Exception as e:
     # Do not raise error for users that do not have Langchain installed 
@@ -1502,11 +1441,11 @@ def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):
 
 def track_feedback(run_id: str, feedback: Dict[str, Any]):
     if not run_id or not isinstance(run_id, str):
-        print("Lunary: No message ID provided to track feedback")
+        logger.exception("[Lunary] No message ID provided to track feedback")
         return
 
     if not isinstance(feedback, dict):
-        print("Lunary: Invalid feedback provided. Pass a valid object")
+        logger.exception("[Lunary]: Invalid feedback provided. Pass a valid object")
         return
 
     track_event(None, "feedback", run_id=run_id, feedback=feedback)
@@ -1538,7 +1477,7 @@ def get_raw_template(slug, app_id=None):
                             headers=headers,  
                             verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
     if not response.ok:
-        raise Exception(f"Lunary: Error fetching template: {response.status_code} - {response.text}")
+        logger.exception(f"[Lunary]: Error fetching template: {response.status_code} - {response.text}")
 
     data = response.json()
     templateCache[slug] = {'timestamp': now, 'data': data}
@@ -1679,14 +1618,13 @@ def get_langchain_template(slug):
 
             messages = []
 
-            # Return array of messages like that:
+            # Return array of messages: 
             #  [
             #     ("system", "You are a helpful AI bot. Your name is {name}."),
             #     ("human", "Hello, how are you doing?"),
             #     ("ai", "I'm doing well, thanks!"),
             #     ("human", "{user_input}"),
             # ]
-
             for message in content:
                 messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
 
@@ -1695,7 +1633,7 @@ def get_langchain_template(slug):
             return template
         
     except Exception as e:
-        print(f"Lunary: Error fetching template: {e}")
+        logger.exception(f"[Lunary]: Error fetching template: {e}")
 
 async def get_langchain_template_async(slug):
     try:
@@ -1740,7 +1678,7 @@ async def get_langchain_template_async(slug):
             return template
 
     except Exception as e:
-        print(f"Lunary: Error fetching template: {e}")
+        logger.exception(f"[Lunary]: Error fetching template: {e}")
 
 import humps
 
@@ -1769,11 +1707,11 @@ def get_dataset(slug: str, app_id=None):
             
             return items
         else:
-            print(f"[Lunary]: Error fetching dataset with status code {response.status_code}. Please contact support@lunary.ai if the problem persists.")
+            logger.exception(f"[Lunary]: Error fetching dataset with status code {response.status_code}. Please contact support@lunary.ai if the problem persists.")
             return []
 
     except Exception as e:
-        print("[Lunary]: Error fetching dataset. Please contact support@lunary.ai if the problem persists.")
+        logger.exception("[Lunary]: Error fetching dataset. Please contact support@lunary.ai if the problem persists.")
         raise e
 
 
@@ -1816,6 +1754,6 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         return passed, results
 
     except Exception as e:
-        print("[Lunary]: Error evaluating result. Please contact support@lunary.ai if the problem persists.")
+        logger.exception("[Lunary]: Error evaluating result. Please contact support@lunary.ai if the problem persists.")
         raise e
 
