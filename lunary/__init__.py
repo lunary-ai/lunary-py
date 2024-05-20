@@ -19,15 +19,16 @@ from .parsers import (
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .thread import Thread
+from .utils import clean_nones, create_uuid_from_string
+from .config import get_config, set_config
 
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
 from .parent import parent_ctx, parent, get_parent # DO NOT REMOVE `parent` import
 from .project import project_ctx # DO NOT REMOVE `project` import
 
-DEFAULT_API_URL = "https://api.lunary.ai"
-
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 run_ctx = ContextVar("run_ids", default=None)
 
@@ -39,27 +40,10 @@ provider = TracerProvider()
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("lunary")
 
-VERBOSE = os.environ.get(
-    "LUNARY_VERBOSE") or os.environ.get("LLMONITOR_VERBOSE")
 
-def clean_nones(value):
-    """
-    Recursively remove all None values from dictionaries and lists, and returns
-    the result as a new dictionary or list.
-    """
-    try:
-        if isinstance(value, list):
-            return [clean_nones(x) for x in value if x is not None]
-        elif isinstance(value, dict):
-            return {
-                key: clean_nones(val)
-                for key, val in value.items()
-                if val is not None
-            }
-        else:
-            return value
-    except Exception as e:
-        return value  
+def config(app_id: str | None = None, verbose: str | None = None, api_url: str | None = None, disable_ssl_verify: bool | None = None):
+    set_config(app_id, verbose, api_url, disable_ssl_verify)
+
 
 def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: str, is_openai: bool):
     if parent_run_id == "None":
@@ -71,17 +55,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
 
     if parent_run_id is not None:
         return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
-
-
-def create_uuid_from_string(seed_string):
-    seed_bytes = seed_string.encode('utf-8')
-    sha256_hash = hashlib.sha256()
-    sha256_hash.update(seed_bytes)
-    hash_hex = sha256_hash.hexdigest()
-    uuid_hex = hash_hex[:32]
-    uuid_obj = uuid.UUID(uuid_hex)
-    return uuid_obj
-
 
 def track_event(
     run_type,
@@ -109,19 +82,15 @@ def track_event(
     is_openai=False
 ):
     try:
-        # Load here in case load_dotenv done after
-        APP_ID = (
-            app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
-                "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
-        )
+        config = get_config()
+        app_id = app_id or config.app_id 
 
-
-        if not APP_ID:
+        if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
         run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
-        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=APP_ID, run_id=run_id, is_openai=is_openai) 
-        run_id = str(create_uuid_from_string(str(run_id) + str(APP_ID)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai) 
+        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
 
         event = {
             "event": event_name,
@@ -144,7 +113,7 @@ def track_event(
             "metadata": metadata,
             "params": params,
             "templateId": template_id,
-            "appId": APP_ID
+            "appId": app_id
         }
 
 
@@ -153,18 +122,18 @@ def track_event(
         else:
             queue.append(event)
 
-        if VERBOSE:
+        if config.verbose:
             event_copy = clean_nones(copy.deepcopy(event))
-            logger.info("\n[Lunary] Add event:", jsonpickle.encode(event_copy, unpicklable=False, indent=4), '\n')
+            logger.info(f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n")
         
     except Exception as e:
-        logger.exception("[Lunary]: Error in `track_event`", e)
+        logger.exception("Error in `track_event`", e)
 
     
 
 
 def handle_internal_error(e):
-    logging.info("[Lunary] Error: ", e)
+    logging.info("Error: ", e)
 
 
 def stream_handler(fn, run_id, name, type, *args, **kwargs):
@@ -569,7 +538,7 @@ def monitor(object):
                     )
                 except Exception as e:
                     logging.info(
-                        "[Lunary] Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
+                        "Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
                     )
 
             elif name == "AsyncOpenAI" or name == "AsyncAzureOpenAI":
@@ -581,7 +550,7 @@ def monitor(object):
                 )
             else:
                 logging.info(
-                    "[Lunary] Unknown OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
+                    "Unknown OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
                 )
         elif openai_version < parse_version("1.0.0"):
             object.ChatCompletion.create = wrap(
@@ -599,7 +568,7 @@ def monitor(object):
             )
 
     except PackageNotFoundError:
-        logging.info("[Lunary] The `openai` package is not installed")
+        logging.info("The `openai` package is not installed")
 
 
 def agent(name=None, user_id=None, user_props=None, tags=None):
@@ -850,11 +819,10 @@ try:
 
         def __init__(
             self,
-            app_id: Union[str, None] = None,
-            api_url: Union[str, None] = None,
-            verbose: bool = False,
+            app_id: Union[str, None] = None
         ) -> None:
             super().__init__()
+            config = get_config()
             try:
                 import lunary
 
@@ -866,7 +834,7 @@ try:
 
             except ImportError:
                 logger.warning(
-                    """[Lunary] To use the Lunary callback handler you need to 
+                    """To use the Lunary callback handler you need to 
                     have the `lunary` Python package installed. Please install it 
                     with `pip install lunary`"""
                 )
@@ -875,7 +843,7 @@ try:
 
             if parse(self.__lunary_version) < parse("0.0.32"):
                 logger.warning(
-                    f"""[Lunary] The installed `lunary` version is
+                    f"""The installed `lunary` version is
                     {self.__lunary_version}
                     but `LunaryCallbackHandler` requires at least version 0.1.1
                     upgrade `lunary` with `pip install --upgrade lunary`"""
@@ -884,22 +852,11 @@ try:
 
             self.__has_valid_config = True
 
-            self.__api_url = (
-                api_url
-                or os.getenv("LUNARY_API_URL")
-                or os.getenv("LLMONITOR_API_URL")
-                or DEFAULT_API_URL
-            )
-            self.__verbose = (
-                verbose
-                or bool(os.getenv("LUNARY_VERBOSE"))
-                or bool(os.getenv("LLMONITOR_VERBOSE"))
-            )
 
-            self.__app_id = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.getenv("LUNARY_APP_ID") or os.getenv("LLMONITOR_APP_ID")
+            self.__app_id = app_id or config.app_id 
             if self.__app_id is None:
                 logger.warning(
-                    """[Lunary] app_id must be provided either as an argument or 
+                    """app_id must be provided either as an argument or 
                     as an environment variable"""
                 )
                 self.__has_valid_config = False
@@ -972,7 +929,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_llm_start`: {e}")
+                logger.exception(f"An error occurred in `on_llm_start`: {e}")
 
 
         def on_chat_model_start(
@@ -1044,7 +1001,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_chat_model_start`: {e}")
+                logger.exception(f"An error occurred in `on_chat_model_start`: {e}")
 
 
         def on_llm_end(
@@ -1085,7 +1042,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_llm_end`: {e}")
+                logger.exception(f"An error occurred in `on_llm_end`: {e}")
 
 
         def on_tool_start(
@@ -1131,7 +1088,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_tool_start`: {e}")
+                logger.exception(f"An error occurred in `on_tool_start`: {e}")
 
 
         def on_tool_end(
@@ -1156,7 +1113,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_tool_end`: {e}")
+                logger.exception(f"An error occurred in `on_tool_end`: {e}")
 
         def on_chain_start(
             self,
@@ -1218,7 +1175,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_chain_start`: {e}")
+                logger.exception(f"An error occurred in `on_chain_start`: {e}")
 
         def on_chain_end(
             self,
@@ -1244,7 +1201,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_chain_end`: {e}")
+                logger.exception(f"An error occurred in `on_chain_end`: {e}")
 
         def on_agent_finish(
             self,
@@ -1269,7 +1226,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_agent_finish`: {e}")
+                logger.exception(f"An error occurred in `on_agent_finish`: {e}")
 
         def on_chain_error(
             self,
@@ -1292,7 +1249,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_chain_error`: {e}")
+                logger.exception(f"An error occurred in `on_chain_error`: {e}")
 
         def on_tool_error(
             self,
@@ -1315,7 +1272,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_tool_error`: {e}")
+                logger.exception(f"An error occurred in `on_tool_error`: {e}")
 
         def on_llm_error(
             self,
@@ -1338,7 +1295,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_llm_error`: {e}")
+                logger.exception(f"An error occurred in `on_llm_error`: {e}")
 
         def on_retriever_start(
             self,
@@ -1378,7 +1335,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_retriever_start`: {e}")
+                logger.exception(f"An error occurred in `on_retriever_start`: {e}")
 
         def on_retriever_end(
             self,
@@ -1407,7 +1364,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_retriever_end`: {e}")
+                logger.exception(f"An error occurred in `on_retriever_end`: {e}")
             
         def on_retriever_error(
             self,
@@ -1428,7 +1385,7 @@ try:
                     callback_queue=self.queue
                 )
             except Exception as e:
-                logger.exception(f"[Lunary] An error occurred in `on_retriever_error`: {e}")
+                logger.exception(f"An error occurred in `on_retriever_error`: {e}")
 
 except Exception as e:
     # Do not raise error for users that do not have Langchain installed 
@@ -1441,11 +1398,11 @@ def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):
 
 def track_feedback(run_id: str, feedback: Dict[str, Any]):
     if not run_id or not isinstance(run_id, str):
-        logger.exception("[Lunary] No message ID provided to track feedback")
+        logger.exception("No message ID provided to track feedback")
         return
 
     if not isinstance(feedback, dict):
-        logger.exception("[Lunary]: Invalid feedback provided. Pass a valid object")
+        logger.exception("Invalid feedback provided. Pass a valid object")
         return
 
     track_event(None, "feedback", run_id=run_id, feedback=feedback)
@@ -1454,12 +1411,10 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
 
 templateCache = {}
 
-def get_raw_template(slug, app_id=None):
-    token = (
-        app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
-            "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
-    )
-    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+def get_raw_template(slug: str,  app_id: str | None = None, api_url: str | None = None):
+    config = get_config()
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url 
 
     global templateCache
     now = time.time() * 1000
@@ -1475,20 +1430,19 @@ def get_raw_template(slug, app_id=None):
 
     response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}", 
                             headers=headers,  
-                            verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
+                            verify=config.ssl_verify)
     if not response.ok:
-        logger.exception(f"[Lunary]: Error fetching template: {response.status_code} - {response.text}")
+        logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
 
     data = response.json()
     templateCache[slug] = {'timestamp': now, 'data': data}
     return data
 
-async def get_raw_template_async(slug):
-    token = (
-        os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get(
-            "LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID")
-    )
-    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: str | None = None):
+    config = get_config()
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url 
+
 
     global templateCache
     now = time.time() * 1000
@@ -1513,84 +1467,90 @@ async def get_raw_template_async(slug):
     return data
 
 
+def render_template(slug: str, data = {}):
+    try:
+        raw_template = get_raw_template(slug)
 
-def render_template(slug, data = {}):
-    raw_template = get_raw_template(slug)
+        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+            raise Exception("Template not found, are the project ID and slug correct?")
 
-    if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-        raise Exception("Template not found, are the project ID and slug correct?")
+        template_id = copy.deepcopy(raw_template['id'])
+        content = copy.deepcopy(raw_template['content'])
+        extra = copy.deepcopy(raw_template['extra'])
 
-    template_id = copy.deepcopy(raw_template['id'])
-    content = copy.deepcopy(raw_template['content'])
-    extra = copy.deepcopy(raw_template['extra'])
+        text_mode = isinstance(content, str)
 
-    text_mode = isinstance(content, str)
-
-    # extra_headers is safe with OpenAI to be used to pass value
-    extra_headers = {
-        "Template-Id": str(template_id)
-    }
-
-    result = None
-    if text_mode:
-        rendered = chevron.render(content, data)
-        result = {
-            "text": rendered, "extra_headers": extra_headers, **extra
-        }
-        return result
-    else:
-        messages = []
-        for message in content:
-            message["content"] = chevron.render(message["content"], data)
-            messages.append(message)
-        result = {
-            "messages": messages, 
-            "extra_headers": extra_headers,
-            **extra
+        # extra_headers is safe with OpenAI to be used to pass value
+        extra_headers = {
+            "Template-Id": str(template_id)
         }
 
-        return result
+        result = None
+        if text_mode:
+            rendered = chevron.render(content, data)
+            result = {
+                "text": rendered, "extra_headers": extra_headers, **extra
+            }
+            return result
+        else:
+            messages = []
+            for message in content:
+                message["content"] = chevron.render(message["content"], data)
+                messages.append(message)
+            result = {
+                "messages": messages, 
+                "extra_headers": extra_headers,
+                **extra
+            }
 
-async def render_template_async(slug, data={}):
-    raw_template = await get_raw_template_async(slug)
+            return result
+    except Exception as e:
+        logging.exception(f"Error rendering template {e}")
 
-    if raw_template.get('message') == 'Template not found, is the project ID correct?':
-        raise Exception("Template not found, are the project ID and slug correct?")
+async def render_template_async(slug: str, data={}):
+    try:
+        raw_template = await get_raw_template_async(slug)
 
-    template_id = copy.deepcopy(raw_template['id'])
-    content = copy.deepcopy(raw_template['content'])
-    extra = copy.deepcopy(raw_template['extra'])
+        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+            raise Exception("Template not found, are the project ID and slug correct?")
 
-    text_mode = isinstance(content, str)
 
-    # extra_headers is safe with OpenAI to be used to pass value
-    extra_headers = {
-        "Template-Id": str(template_id)
-    }
+        template_id = copy.deepcopy(raw_template['id'])
+        content = copy.deepcopy(raw_template['content'])
+        extra = copy.deepcopy(raw_template['extra'])
 
-    result = None
-    if text_mode:
-        rendered = chevron.render(content, data)
-        result = {
-            "text": rendered,
-            "extra_headers": extra_headers,
-            **extra
+        text_mode = isinstance(content, str)
+
+        # extra_headers is safe with OpenAI to be used to pass value
+        extra_headers = {
+            "Template-Id": str(template_id)
         }
-        return result
-    else:
-        messages = []
-        for message in content:
-            message["content"] = chevron.render(message["content"], data)
-            messages.append(message)
-        result = {
-            "messages": messages,
-            "extra_headers": extra_headers,
-            **extra
-        }
 
-        return result
+        result = None
+        if text_mode:
+            rendered = chevron.render(content, data)
+            result = {
+                "text": rendered,
+                "extra_headers": extra_headers,
+                **extra
+            }
+            return result
+        else:
+            messages = []
+            for message in content:
+                message["content"] = chevron.render(message["content"], data)
+                messages.append(message)
+            result = {
+                "messages": messages,
+                "extra_headers": extra_headers,
+                **extra
+            }
 
-def get_langchain_template(slug):
+            return result
+    except Exception as e:
+        logging.exception(f"Error rendering template {e}")
+
+def get_langchain_template(slug: str):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
@@ -1633,7 +1593,7 @@ def get_langchain_template(slug):
             return template
         
     except Exception as e:
-        logger.exception(f"[Lunary]: Error fetching template: {e}")
+        logger.exception(f"Error fetching template: {e}")
 
 async def get_langchain_template_async(slug):
     try:
@@ -1678,7 +1638,7 @@ async def get_langchain_template_async(slug):
             return template
 
     except Exception as e:
-        logger.exception(f"[Lunary]: Error fetching template: {e}")
+        logger.exception(f"Error fetching template: {e}")
 
 import humps
 
@@ -1688,9 +1648,10 @@ class DatasetItem:
             for key, value in d.items():
                 setattr(self, key, value)
 
-def get_dataset(slug: str, app_id=None):
-    token = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
-    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None):
+    config = get_config()
+    token = app_id or config.app_id 
+    api_url = api_url or config.api_url 
 
     try:
         url = f"{api_url}/v1/datasets/{slug}"
@@ -1698,7 +1659,7 @@ def get_dataset(slug: str, app_id=None):
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = requests.get(url, headers=headers, verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
+        response = requests.get(url, headers=headers, verify=config.ssl_verify)
         if response.ok:
             dataset = response.json()
             dataset = humps.decamelize(dataset)
@@ -1707,18 +1668,17 @@ def get_dataset(slug: str, app_id=None):
             
             return items
         else:
-            logger.exception(f"[Lunary]: Error fetching dataset with status code {response.status_code}. Please contact support@lunary.ai if the problem persists.")
-            return []
+            raise Exception(f"Status code: {response.status_code}")
 
     except Exception as e:
-        logger.exception("[Lunary]: Error fetching dataset. Please contact support@lunary.ai if the problem persists.")
-        raise e
+        logger.exception(f"Error fetching dataset {e}")
 
 
 
-def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None):
-    token = app_id or os.environ.get("LUNARY_PUBLIC_KEY") or os.environ.get("LUNARY_APP_ID") or os.environ.get("LLMONITOR_APP_ID") or "https://api.lunary.ai"
-    api_url = os.environ.get("LUNARY_API_URL") or DEFAULT_API_URL
+def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None, api_url=None):
+    config = get_config()
+    token = app_id or config.app_id 
+    api_url = api_url or config.api_url 
 
     try:
         url = f"{api_url}/v1/evaluations/run"
@@ -1742,10 +1702,10 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         if tags is not None:
             data["tags"] = tags
 
-        response = requests.post(url, headers=headers, json=data, verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
+        response = requests.post(url, headers=headers, json=data, verify=config.ssl_verify)
         if response.status_code == 500:
             error_message = response.json().get('message')
-            raise Exception(f"[Lunary]: Evaluation error: {error_message}")
+            raise Exception(f"Evaluation error: {error_message}")
 
         data = humps.decamelize(response.json())
         passed = data["passed"]
@@ -1754,6 +1714,6 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         return passed, results
 
     except Exception as e:
-        logger.exception("[Lunary]: Error evaluating result. Please contact support@lunary.ai if the problem persists.")
+        logger.exception("Error evaluating result. Please contact support@lunary.ai if the problem persists.")
         raise e
 

@@ -5,11 +5,9 @@ import os
 import logging
 from threading import Thread
 import jsonpickle
+from .config import get_config
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_API_URL = "https://api.lunary.ai"
-
 
 class Consumer(Thread):
     def __init__(self, event_queue, app_id=None):
@@ -28,34 +26,21 @@ class Consumer(Thread):
         self.send_batch()
 
     def send_batch(self):
+        config = get_config()
         batch = self.event_queue.get_batch()
 
-        verbose = (
-            os.environ.get("LUNARY_VERBOSE")
-            or os.environ.get("LLMONITOR_VERBOSE")
-            or False
-        )
+        verbose = config.verbose
+        api_url = config.api_url
 
-        api_url = (
-            os.environ.get("LUNARY_API_URL")
-            or os.environ.get("LLMONITOR_API_URL")
-            or DEFAULT_API_URL
-        )
-
-        token = (
-            self.app_id
-            or os.environ.get("LUNARY_PUBLIC_KEY") 
-            or os.environ.get("LUNARY_APP_ID") 
-            or os.environ.get("LLMONITOR_APP_ID")
-        )
+        token = self.app_id or config.app_id
 
         if len(batch) > 0:
             if verbose:
-                logging.info(f"[Lunary] Sending {len(batch)} events.")
+                logging.info(f"Sending {len(batch)} events.")
 
             try:
                 if verbose:
-                    logging.info("[Lunary] Sending events to ", api_url)
+                    logging.info("Sending events to ", api_url)
 
                 headers = {
                     'Authorization': f'Bearer {token}',
@@ -67,16 +52,18 @@ class Consumer(Thread):
                     api_url + "/v1/runs/ingest",
                     data=data,
                     headers=headers,
-                    verify=False if os.environ.get("DISABLE_SSL_VERIFY") == "True" else True)
+                    verify=config.ssl_verify)
 
                 if verbose:
-                    logging.info("[Lunary] Events sent.", response.status_code)
+                    logging.info("Events sent.", response.status_code)
 
                 if response.status_code != 200:
-                    logging.error("[Lunary] Error sending events")
+                    logging.exception("Error sending events")
             except Exception as e:
                 if verbose:
-                    logging.error("[Lunary] Error sending events", e)
+                    logging.exception(f"Error sending events: {e}")
+                else:
+                    logging.error(f"Error sending events")
 
                 self.event_queue.append(batch)
 
