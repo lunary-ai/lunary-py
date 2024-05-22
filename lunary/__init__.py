@@ -127,12 +127,9 @@ def track_event(
         if config.verbose:
             event_copy = clean_nones(copy.deepcopy(event))
             logger.info(f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n")
-        
+
     except Exception as e:
         logger.exception("Error in `track_event`", e)
-
-    
-
 
 def handle_internal_error(e):
     logger.info("Error: ", e)
@@ -1505,9 +1502,6 @@ def render_template(slug: str, data = {}):
 
             return result
 
-    except TemplateNotFoundError as e:
-        logger.error(e)
-        raise
     except Exception as e:
         logger.exception(f"Error rendering template {e}")
         raise
@@ -1596,9 +1590,9 @@ def get_langchain_template(slug: str):
             template = ChatPromptTemplate.from_messages(messages)
 
             return template
-        
-    except TemplateNotFoundError as e:
-        logger.error(e)
+
+    except Exception as e:
+        logger.exception(f"Error rendering template {e}")
         raise
 
 async def get_langchain_template_async(slug):
@@ -1643,9 +1637,6 @@ async def get_langchain_template_async(slug):
 
             return template
 
-    except TemplateNotFoundError as e:
-        logger.error(e)
-        raise
     except Exception as e:
         logger.exception(f"Error fetching template: {e}")
         raise
