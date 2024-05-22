@@ -21,6 +21,7 @@ from .event_queue import EventQueue
 from .thread import Thread
 from .utils import clean_nones, create_uuid_from_string
 from .config import get_config, set_config
+from .errors import TemplateNotFoundError
 
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
@@ -134,7 +135,7 @@ def track_event(
 
 
 def handle_internal_error(e):
-    logging.info("Error: ", e)
+    logger.info("Error: ", e)
 
 
 def stream_handler(fn, run_id, name, type, *args, **kwargs):
@@ -538,7 +539,7 @@ def monitor(object):
                         output_parser=OpenAIUtils.parse_output,
                     )
                 except Exception as e:
-                    logging.info(
+                    logger.info(
                         "Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
                     )
 
@@ -550,7 +551,7 @@ def monitor(object):
                     output_parser=OpenAIUtils.parse_output,
                 )
             else:
-                logging.info(
+                logger.info(
                     "Unknown OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
                 )
         elif openai_version < parse_version("1.0.0"):
@@ -569,7 +570,7 @@ def monitor(object):
             )
 
     except PackageNotFoundError:
-        logging.info("The `openai` package is not installed")
+        logger.info("The `openai` package is not installed")
 
 
 def agent(name=None, user_id=None, user_props=None, tags=None):
@@ -1363,7 +1364,7 @@ try:
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_end`: {e}")
-            
+
         def on_retriever_error(
             self,
             error: BaseException,
@@ -1471,7 +1472,7 @@ def render_template(slug: str, data = {}):
         raw_template = get_raw_template(slug)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, are the project ID and slug correct?")
+            raise TemplateNotFoundError()
 
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
@@ -1503,16 +1504,20 @@ def render_template(slug: str, data = {}):
             }
 
             return result
+
+    except TemplateNotFoundError as e:
+        logger.error(e)
+        raise
     except Exception as e:
-        logging.exception(f"Error rendering template {e}")
+        logger.exception(f"Error rendering template {e}")
+        raise
 
 async def render_template_async(slug: str, data={}):
     try:
         raw_template = await get_raw_template_async(slug)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, are the project ID and slug correct?")
-
+            raise TemplateNotFoundError()
 
         template_id = copy.deepcopy(raw_template['id'])
         content = copy.deepcopy(raw_template['content'])
@@ -1547,7 +1552,8 @@ async def render_template_async(slug: str, data={}):
 
             return result
     except Exception as e:
-        logging.exception(f"Error rendering template {e}")
+        logger.exception(f"Error rendering template {e}")
+        raise
 
 def get_langchain_template(slug: str):
     try:
@@ -1556,7 +1562,7 @@ def get_langchain_template(slug: str):
         raw_template = get_raw_template(slug)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
-            raise Exception("Template not found, are the project ID and slug correct?")
+            raise TemplateNotFoundError()
 
         content = copy.deepcopy(raw_template['content'])
 
@@ -1591,8 +1597,9 @@ def get_langchain_template(slug: str):
 
             return template
         
-    except Exception as e:
-        logger.exception(f"Error fetching template: {e}")
+    except TemplateNotFoundError as e:
+        logger.error(e)
+        raise
 
 async def get_langchain_template_async(slug):
     try:
@@ -1601,7 +1608,7 @@ async def get_langchain_template_async(slug):
         raw_template = await get_raw_template_async(slug)
 
         if raw_template.get('message') == 'Template not found, is the project ID correct?':
-            raise Exception("Template not found, are the project ID and slug correct?")
+            raise TemplateNotFoundError()
 
         content = copy.deepcopy(raw_template['content'])
 
@@ -1636,8 +1643,12 @@ async def get_langchain_template_async(slug):
 
             return template
 
+    except TemplateNotFoundError as e:
+        logger.error(e)
+        raise
     except Exception as e:
         logger.exception(f"Error fetching template: {e}")
+        raise
 
 import humps
 
@@ -1671,8 +1682,7 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
 
     except Exception as e:
         logger.exception(f"Error fetching dataset {e}")
-
-
+        raise
 
 def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None, api_url=None):
     config = get_config()
