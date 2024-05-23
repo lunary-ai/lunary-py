@@ -36,7 +36,7 @@ run_ctx = ContextVar("run_ids", default=None)
 
 event_queue_ctx = ContextVar("event_queue_ctx")
 event_queue_ctx.set(EventQueue())
-queue = event_queue_ctx.get() 
+queue = event_queue_ctx.get()
 
 provider = TracerProvider()
 trace.set_tracer_provider(provider)
@@ -85,14 +85,14 @@ def track_event(
 ):
     try:
         config = get_config()
-        app_id = app_id or config.app_id 
+        app_id = app_id or config.app_id
 
         if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-        run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
-        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai) 
-        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again
+        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai)
+        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use
 
         event = {
             "event": event_name,
@@ -103,7 +103,7 @@ def track_event(
             "tags": tags or tags_ctx.get(),
             "threadTags": thread_tags,
             "runId": run_id,
-            "parentRunId": parent_run_id, 
+            "parentRunId": parent_run_id,
             "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
             "message": message,
             "input": input,
@@ -628,7 +628,7 @@ try:
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
-    from langchain_core.messages import BaseMessage, BaseMessageChunk 
+    from langchain_core.messages import BaseMessage, BaseMessageChunk
     from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
     from langchain_core.load import dumps
@@ -691,7 +691,7 @@ try:
     def _serialize(data: Any):
         if not data:
             return None
-            
+
         if hasattr(data, 'messages'):
             return _serialize(data.messages)
         if isinstance(data, BaseMessage) or isinstance(data, BaseMessageChunk):
@@ -716,7 +716,7 @@ try:
 
         return serialized
 
-    
+
 
     def _parse_output(raw_output: dict) -> Any:
         serialized = _serialize(raw_output)
@@ -817,8 +817,8 @@ try:
 
             except ImportError:
                 logger.warning(
-                    """To use the Lunary callback handler you need to 
-                    have the `lunary` Python package installed. Please install it 
+                    """To use the Lunary callback handler you need to
+                    have the `lunary` Python package installed. Please install it
                     with `pip install lunary`"""
                 )
                 self.__has_valid_config = False
@@ -836,15 +836,15 @@ try:
             self.__has_valid_config = True
 
 
-            self.__app_id = app_id or config.app_id 
+            self.__app_id = app_id or config.app_id
             if self.__app_id is None:
                 logger.warning(
-                    """app_id must be provided either as an argument or 
+                    """app_id must be provided either as an argument or
                     as an environment variable"""
                 )
                 self.__has_valid_config = False
-            
-            self.queue = queue 
+
+            self.queue = queue
 
             if self.__has_valid_config is False:
                 return None
@@ -983,7 +983,7 @@ try:
                     user_props=user_props,
                     app_id=self.__app_id,
                     callback_queue=self.queue,
-                    runtime="langchain-py" 
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chat_model_start`: {e}")
@@ -1025,7 +1025,7 @@ try:
                     },
                     app_id=self.__app_id,
                     callback_queue=self.queue,
-                    runtime="langchain-py" 
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_end`: {e}")
@@ -1072,7 +1072,7 @@ try:
                     user_props=user_props,
                     app_id=self.__app_id,
                     callback_queue=self.queue,
-                    runtime="langchain-py" 
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_start`: {e}")
@@ -1098,7 +1098,7 @@ try:
                     output=output,
                     app_id=self.__app_id,
                     callback_queue=self.queue,
-                    runtime="langchain-py" 
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_end`: {e}")
@@ -1385,7 +1385,7 @@ try:
                 logger.exception(f"An error occurred in `on_retriever_error`: {e}")
 
 except Exception as e:
-    # Do not raise error for users that do not have Langchain installed 
+    # Do not raise error for users that do not have Langchain installed
     pass
 
 
@@ -1411,7 +1411,7 @@ templateCache = {}
 def get_raw_template(slug: str,  app_id: str | None = None, api_url: str | None = None):
     config = get_config()
     token = app_id or config.app_id
-    api_url = api_url or config.api_url 
+    api_url = api_url or config.api_url
 
     global templateCache
     now = time.time() * 1000
@@ -1425,8 +1425,8 @@ def get_raw_template(slug: str,  app_id: str | None = None, api_url: str | None 
         'Content-Type': 'application/json'
     }
 
-    response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}", 
-                            headers=headers,  
+    response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}",
+                            headers=headers,
                             verify=config.ssl_verify)
     if not response.ok:
         logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
@@ -1438,7 +1438,7 @@ def get_raw_template(slug: str,  app_id: str | None = None, api_url: str | None 
 async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: str | None = None):
     config = get_config()
     token = app_id or config.app_id
-    api_url = api_url or config.api_url 
+    api_url = api_url or config.api_url
 
 
     global templateCache
@@ -1495,7 +1495,7 @@ def render_template(slug: str, data = {}):
                 message["content"] = chevron.render(message["content"], data)
                 messages.append(message)
             result = {
-                "messages": messages, 
+                "messages": messages,
                 "extra_headers": extra_headers,
                 **extra
             }
@@ -1577,7 +1577,7 @@ def get_langchain_template(slug: str):
 
             messages = []
 
-            # Return array of messages: 
+            # Return array of messages:
             #  [
             #     ("system", "You are a helpful AI bot. Your name is {name}."),
             #     ("human", "Hello, how are you doing?"),
@@ -1592,7 +1592,7 @@ def get_langchain_template(slug: str):
             return template
 
     except Exception as e:
-        logger.exception(f"Error rendering template {e}")
+        logger.exception(f"Error fetching template {e}")
         raise
 
 async def get_langchain_template_async(slug):
@@ -1651,8 +1651,8 @@ class DatasetItem:
 
 def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None):
     config = get_config()
-    token = app_id or config.app_id 
-    api_url = api_url or config.api_url 
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
 
     try:
         url = f"{api_url}/v1/datasets/{slug}"
@@ -1666,7 +1666,7 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
             dataset = humps.decamelize(dataset)
             items_data = dataset.get('items', [])
             items = [DatasetItem(d=item) for item in items_data]
-            
+
             return items
         else:
             raise Exception(f"Status code: {response.status_code}")
@@ -1677,8 +1677,8 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
 
 def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None, api_url=None):
     config = get_config()
-    token = app_id or config.app_id 
-    api_url = api_url or config.api_url 
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
 
     try:
         url = f"{api_url}/v1/evaluations/run"
