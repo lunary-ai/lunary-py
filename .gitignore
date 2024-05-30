@@ -6,3 +6,4 @@ build
 __pycache__/
 lunary/test.py
 lunary/demo.py
+data
