@@ -629,7 +629,7 @@ try:
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
-    from langchain_core.messages import BaseMessage, BaseMessageChunk 
+    from langchain_core.messages import BaseMessage, BaseMessageChunk, ToolMessage 
     from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
     from langchain_core.load import dumps
@@ -767,14 +767,27 @@ try:
         }
         return tool_call
 
+    def _parse_tool_message(tool_message: ToolMessage):
+        tool_message = {
+            "role": "tool",
+            "content": getattr(tool_message, "content", None),
+            "name": getattr(tool_message, "name", None),
+            "tool_call_id": getattr(tool_message, "tool_call_id", None),
+        }
+        return tool_message
+
 
     def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
+        if message.type == 'tool':
+            return _parse_tool_message(message)
+
         parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
 
         # For tool calls in input
         tool_calls = getattr(message, 'tool_calls', None)
         if tool_calls:
             parsed["tool_calls"] = [_parse_tool_call(tool_call) for tool_call in tool_calls]
+
 
         # For tool calls in output
         keys = ["function_call", "tool_calls", "tool_call_id", "name"]
