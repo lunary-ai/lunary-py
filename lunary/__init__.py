@@ -733,6 +733,8 @@ try:
     ) -> str:
         if role == "human":
             return "user"
+        elif role == "ai":
+            return "assistant"
         else:
             return role
 
