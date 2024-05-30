@@ -754,9 +754,28 @@ try:
         return metadata.get("user_props", None)
 
 
+    def _parse_tool_call(tool_call: Dict[str, Any]):
+        tool_call = {
+            "id": tool_call.get("id"),
+            "type": "function",
+            "function": {
+                "name": tool_call.get("name"),
+                "arguments": str(tool_call.get("args"))
+            }
+        }
+        return tool_call
+
+
     def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
-        keys = ["function_call", "tool_calls", "tool_call_id", "name"]
         parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
+
+        # For tool calls in input
+        tool_calls = getattr(message, 'tool_calls', None)
+        if tool_calls:
+            parsed["tool_calls"] = [_parse_tool_call(tool_call) for tool_call in tool_calls]
+
+        # For tool calls in output
+        keys = ["function_call", "tool_calls", "tool_call_id", "name"]
         parsed.update(
             {
                 key: cast(Any, message.additional_kwargs.get(key))
@@ -764,6 +783,7 @@ try:
                 if message.additional_kwargs.get(key) is not None
             }
         )
+
         return parsed
 
 

@@ -32,9 +32,9 @@ class Consumer(Thread):
         verbose = config.verbose
         api_url = config.api_url
 
-        token = self.app_id or config.app_id
 
         if len(batch) > 0:
+            token = batch[0].get("appId") or self.app_id or config.app_id
             if verbose:
                 logging.info(f"Sending {len(batch)} events.")
 
@@ -53,12 +53,10 @@ class Consumer(Thread):
                     data=data,
                     headers=headers,
                     verify=config.ssl_verify)
+                response.raise_for_status()
 
                 if verbose:
                     logging.info("Events sent.", response.status_code)
-
-                if response.status_code != 200:
-                    logging.exception("Error sending events")
             except Exception as e:
                 if verbose:
                     logging.exception(f"Error sending events: {e}")
