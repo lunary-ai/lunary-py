@@ -910,7 +910,8 @@ try:
                     params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_start`: {e}")
@@ -982,7 +983,8 @@ try:
                     params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chat_model_start`: {e}")
@@ -1023,7 +1025,8 @@ try:
                         "completion": token_usage.get("completion_tokens"),
                     },
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_end`: {e}")
@@ -1069,7 +1072,8 @@ try:
                     metadata=metadata,
                     user_props=user_props,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_start`: {e}")
@@ -1094,7 +1098,8 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_end`: {e}")
@@ -1156,7 +1161,8 @@ try:
                     metadata=metadata,
                     user_props=user_props,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_start`: {e}")
@@ -1182,7 +1188,8 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_end`: {e}")
@@ -1207,7 +1214,8 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_agent_finish`: {e}")
@@ -1230,7 +1238,8 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_error`: {e}")
@@ -1253,7 +1262,8 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_error`: {e}")
@@ -1276,7 +1286,8 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_error`: {e}")
@@ -1311,12 +1322,14 @@ try:
                     "retriever",
                     "start",
                     user_id=user_id,
+                    user_props=user_props,
                     run_id=run_id_str,
                     parent_run_id=parent_run_id,
                     name=name,
                     input=query,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_start`: {e}")
@@ -1345,7 +1358,8 @@ try:
                     parent_run_id=parent_run_id,
                     output=doc_metadata,
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_end`: {e}")
@@ -1366,7 +1380,8 @@ try:
                     run_id=run_id_str,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
-                    callback_queue=self.queue
+                    callback_queue=self.queue,
+                    runtime="langchain-py"
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_error`: {e}")
@@ -1374,7 +1389,6 @@ try:
 except Exception as e:
     # Do not raise error for users that do not have Langchain installed 
     pass
-
 
 def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):
     return Thread(track_event=track_event, id=id, tags=tags)
