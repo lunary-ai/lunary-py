@@ -1163,7 +1163,7 @@ try:
                     parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
                     spans[run_id_str] = span
 
-                name = serialized.get("id", [None, None, None, None])[3]
+                name = serialized.get("id", [None, None, None, None])[3] if len(serialized.get("id", [])) > 3 else None
                 type = "chain"
                 metadata = metadata or {}
 
