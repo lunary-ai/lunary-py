@@ -1,4 +1,4 @@
-import uuid, warnings, traceback, logging, copy, time, chevron, hashlib, aiohttp, copy
+import warnings, traceback, logging, copy, time, chevron, hashlib, aiohttp, copy
 
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
@@ -6,9 +6,6 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Optional
 import jsonpickle
-
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry import trace
 
 from .parsers import (
     default_input_parser,
@@ -20,6 +17,7 @@ from .event_queue import EventQueue
 from .thread import Thread
 from .utils import clean_nones, create_uuid_from_string
 from .config import get_config, set_config
+from .run_manager import RunManager
 
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
@@ -30,24 +28,52 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-run_ctx = ContextVar("run_ids", default=None)
 
 event_queue_ctx = ContextVar("event_queue_ctx")
 event_queue_ctx.set(EventQueue())
 queue = event_queue_ctx.get() 
 
-if not trace._TRACER_PROVIDER:
-    provider = TracerProvider()
-    trace.set_tracer_provider(provider)
-tracer = trace.get_tracer("lunary")
+run_manager = RunManager()
+
+from contextvars import ContextVar
+
+run_ctx = ContextVar("run_ctx", default=None)
+
+class RunContextManager:
+    def __init__(self, run_id: str):
+        run_ctx.set(run_id)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        run_ctx.set(None)
+
+def run_context(id: str) -> RunContextManager:
+    return RunContextManager(id)
+
+def get_parent():
+  parent = parent_ctx.get()
+  if parent and parent.get("retrieved", False) == False:
+    parent_ctx.set({"message_id": parent["message_id"], "retrieved": True})
+    return parent.get("message_id", None)
+  return None
+
+
 
 def config(app_id: str | None = None, verbose: str | None = None, api_url: str | None = None, disable_ssl_verify: bool | None = None):
     set_config(app_id, verbose, api_url, disable_ssl_verify)
 
 
-def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: str, is_openai: bool):
+def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: str):
     if parent_run_id == "None":
         parent_run_id = None
+
+    parent_run = run_ctx.get()
+    if parent_run and parent_run != run_id:
+        run_ctx.set(None)
+        print(parent_run)
+        return str(create_uuid_from_string(str(parent_run) + str(app_id)))
 
     parent_from_ctx = get_parent()
     if parent_from_ctx and run_type != "thread":
@@ -59,7 +85,7 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
 def track_event(
     run_type,
     event_name,
-    run_id,
+    run_id: str,
     parent_run_id=None,
     name=None,
     input=None,
@@ -88,9 +114,10 @@ def track_event(
         if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-        run_ctx.set(run_id) # done before run_id transformation because the context will be used to pass the id in track_event, so run_id will be transformed again 
-        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id, is_openai=is_openai) 
-        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id) 
+
+        # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
+        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  
 
         event = {
             "event": event_name,
@@ -128,12 +155,6 @@ def track_event(
         
     except Exception as e:
         logger.exception("Error in `track_event`", e)
-
-    
-
-
-def handle_internal_error(e):
-    logging.info("Error: ", e)
 
 
 def stream_handler(fn, run_id, name, type, *args, **kwargs):
@@ -314,6 +335,7 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
 def wrap(
     fn,
     type=None,
+    run_id=None,
     name=None,
     user_id=None,
     user_props=None,
@@ -322,77 +344,80 @@ def wrap(
     output_parser=default_output_parser,
 ):
     def sync_wrapper(*args, **kwargs):
-        with tracer.start_as_current_span(uuid.uuid4()) as run:
-            output = None
+        output = None
+
+        parent_run_id = kwargs.pop("parent", None)
+        run = run_manager.start_run(run_id, parent_run_id)
+
+        with run_context(run.id):
             try:
-                params = filter_params(kwargs)
-                metadata = kwargs.pop("metadata", None)
-                run_id = trace.get_current_span().context.span_id
-                parent_run_id = kwargs.pop("parent", None) or getattr(
-                    trace.get_current_span().parent, "span_id", None
-                )
-                parsed_input = input_parser(*args, **kwargs)
+                try:
+                    params = filter_params(kwargs)
+                    metadata = kwargs.pop("metadata", None)
+                    parsed_input = input_parser(*args, **kwargs)
 
-                track_event(
-                    type,
-                    "start",
-                    run_id,
-                    parent_run_id,
-                    input=parsed_input["input"],
-                    name=name or parsed_input["name"],
-                    user_id=kwargs.pop(
-                        "user_id", None) or user_ctx.get() or user_id,
-                    user_props=kwargs.pop("user_props", None)
-                    or user_props
-                    or user_props_ctx.get(),
-                    params=params,
-                    metadata=metadata,
-                    tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                    template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
-                    is_openai=True
-                )
-            except Exception as e:
-                handle_internal_error(e)
+                    track_event(
+                        type,
+                        "start",
+                        run_id=run.id,
+                        parent_run_id=parent_run_id,
+                        input=parsed_input["input"],
+                        name=name or parsed_input["name"],
+                        user_id=kwargs.pop(
+                            "user_id", None) or user_ctx.get() or user_id,
+                        user_props=kwargs.pop("user_props", None)
+                        or user_props
+                        or user_props_ctx.get(),
+                        params=params,
+                        metadata=metadata,
+                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
+                        is_openai=True
+                    )
+                except Exception as e:
+                    logging.exception(e)
 
-            if kwargs.get("stream") == True:
-                return stream_handler(
-                    fn, run_id, name or parsed_input["name"], type, *args, **kwargs
-                )
+                if kwargs.get("stream") == True:
+                    return stream_handler(
+                        fn, run.id, name or parsed_input["name"], type, *args, **kwargs
+                    )
 
-            try:
-                output = fn(*args, **kwargs)
+                try:
+                    output = fn(*args, **kwargs)
 
-            except Exception as e:
-                track_event(
-                    type,
-                    "error",
-                    run_id,
-                    error={"message": str(e), "stack": traceback.format_exc()},
-                )
+                except Exception as e:
+                    track_event(
+                        type,
+                        "error",
+                        run.id,
+                        error={"message": str(e), "stack": traceback.format_exc()},
+                    )
 
-                # rethrow error
-                raise e
+                    # rethrow error
+                    raise e
 
-            try:
-                parsed_output = output_parser(
-                    output, kwargs.get("stream", False))
+                try:
+                    parsed_output = output_parser(
+                        output, kwargs.get("stream", False))
 
-                track_event(
-                    type,
-                    "end",
-                    run_id,
-                    name=name
-                    or parsed_input[
-                        "name"
-                    ],  # Need name in case need to compute tokens usage server side
-                    output=parsed_output["output"],
-                    token_usage=parsed_output["tokensUsage"],
-                )
-                return output
-            except Exception as e:
-                handle_internal_error(e)
+                    track_event(
+                        type,
+                        "end",
+                        run.id,
+                        name=name
+                        or parsed_input[
+                            "name"
+                        ],  # Need name in case need to compute tokens usage server side
+                        output=parsed_output["output"],
+                        token_usage=parsed_output["tokensUsage"],
+                    )
+                    return output
+                except Exception as e:
+                    logger.exception(e)(e)
+                finally:
+                    return output
             finally:
-                return output
+                run_manager.end_run(run.id)
 
     return sync_wrapper
 
@@ -409,37 +434,37 @@ def async_wrap(
 ):
     async def wrapper(*args, **kwargs):
         async def async_wrapper(*args, **kwargs):
-            with tracer.start_as_current_span(uuid.uuid4()) as run:
-                output = None
+            output = None
+
+            parent_run_id = kwargs.pop("parent", None)
+            run = run_manager.start_run(parent_run_id=parent_run_id)
+
+            try:
                 try:
                     params = filter_params(kwargs)
                     metadata = kwargs.pop("metadata", None)
-                    run_id = trace.get_current_span().context.span_id
-                    parent_run_id = getattr(
-                        trace.get_current_span().parent, "span_id", None
-                    )
                     parsed_input = input_parser(*args, **kwargs)
 
                     track_event(
                         type,
                         "start",
-                        run_id,
-                        parent_run_id,
+                        run_id=run.id,
+                        parent_run_id=parent_run_id,
                         input=parsed_input["input"],
                         name=name or parsed_input["name"],
                         user_id=kwargs.pop(
                             "user_id", None
                         ) or user_ctx.get() or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                   or user_props
-                                   or user_props_ctx.get(),
+                                    or user_props
+                                    or user_props_ctx.get(),
                         params=params,
                         metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
-                    handle_internal_error(e)
+                    logger.exception(e)
 
                 try:
                     output = await fn(*args, **kwargs)
@@ -448,7 +473,7 @@ def async_wrap(
                     track_event(
                         type,
                         "error",
-                        run_id,
+                        run.id,
                         error={"message": str(e), "stack": traceback.format_exc()},
                     )
 
@@ -463,55 +488,60 @@ def async_wrap(
                     track_event(
                         type,
                         "end",
-                        run_id,
+                        run.id,
                         name=name
-                             or parsed_input[
-                                 "name"
-                             ],  # Need name in case need to compute tokens usage server side
+                                or parsed_input[
+                                    "name"
+                                ],  # Need name in case need to compute tokens usage server side
                         output=parsed_output["output"],
                         token_usage=parsed_output["tokensUsage"],
                     )
                     return output
                 except Exception as e:
-                    handle_internal_error(e)
+                    logger.exception(e)(e)
                 finally:
                     return output
+            finally:
+                run_manager.end_run(run.id)
+
 
         def async_stream_wrapper(*args, **kwargs):
-            with tracer.start_as_current_span(uuid.uuid4()) as run:
-                output = None
+            parent_run_id = kwargs.pop("parent", None)
+            run = run_manager.start_run(parent_run_id=parent_run_id)
+            
+            try:
                 try:
-                    run_id = trace.get_current_span().context.span_id
-                    parent_run_id = getattr(
-                        trace.get_current_span().parent, "span_id", None
-                    )
+                    params = filter_params(kwargs)
+                    metadata = kwargs.pop("metadata", None)
                     parsed_input = input_parser(*args, **kwargs)
 
                     track_event(
                         type,
                         "start",
-                        run_id,
-                        parent_run_id,
+                        run_id= run.id,
+                        parent_run_id=parent_run_id,
                         input=parsed_input["input"],
                         name=name or parsed_input["name"],
                         user_id=kwargs.pop(
                             "user_id", None
                         ) or user_ctx.get() or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                   or user_props
-                                   or user_props_ctx.get(),
+                                    or user_props
+                                    or user_props_ctx.get(),
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        params=parsed_input.get("extra", None),
+                        params=params,
+                        metadata=metadata,
                         template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
                     )
                 except Exception as e:
-                    handle_internal_error(e)
+                    logger.exception(e)
 
-                return async_stream_handler(fn, run_id, name or parsed_input["name"], type, *args, **kwargs)
+                return async_stream_handler(fn, run.id, name or parsed_input["name"], type, *args, **kwargs)
+            finally:
+                run_manager.end_run(run.id)
 
         if kwargs.get("stream") == True:
             return async_stream_wrapper(*args, **kwargs)
-
         else:
             return await async_wrapper(*args, **kwargs)
 
@@ -847,9 +877,6 @@ try:
 
                 self.__lunary_version = importlib.metadata.version("lunary")
                 self.__track_event = lunary.track_event
-                self.__tracer = lunary.tracer
-                self.__set_span_in_context = lunary.trace.set_span_in_context
-                self.__trace = lunary.trace
 
             except ImportError:
                 logger.warning(
@@ -898,17 +925,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run_id_str = str(run_id)
-                if parent_run_id and spans.get(str(parent_run_id)):
-                    parent = spans[str(parent_run_id)]
-                    context = self.__set_span_in_context(parent)
-                    span = self.__tracer.start_span("llm", context=context)
-                    spans[run_id_str] = span
-                else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("llm", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
-                    spans[run_id_str] = span
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -936,8 +953,8 @@ try:
                     "llm",
                     "start",
                     user_id=user_id,
-                    run_id=run_id_str,
-                    parent_run_id=parent_run_id,
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     name=name,
                     input=input,
                     tags=tags,
@@ -964,24 +981,7 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                context = self.__set_span_in_context(self.__trace.get_current_span())
-                run_id_str = str(run_id)
-
-                # Sometimes parent_run_id is set by langchain, but the
-                # corresponding callback handler method is not called
-                if parent_run_id and spans.get(str(parent_run_id)) is None:
-                    parent_run_id = None
-
-                if parent_run_id:
-                    parent = spans[str(parent_run_id)]
-                    context = self.__set_span_in_context(parent)
-                    span = self.__tracer.start_span("llm", context=context)
-                    spans[run_id_str] = span
-                else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("llm", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
-                    spans[run_id_str] = span
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -1009,8 +1009,8 @@ try:
                     "llm",
                     "start",
                     user_id=user_id,
-                    run_id=run_id_str,
-                    parent_run_id=str(parent_run_id),
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     name=name,
                     input=input,
                     tags=tags,
@@ -1034,9 +1034,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
 
                 token_usage = (response.llm_output or {}).get("token_usage", {})
                 parsed_output: Any = [
@@ -1079,17 +1077,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run_id_str = str(run_id)
-                if parent_run_id:
-                    parent = spans[str(parent_run_id)]
-                    context = self.__set_span_in_context(parent)
-                    span = self.__tracer.start_span("tool", context=context)
-                    spans[run_id_str] = span
-                else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("tool", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
-                    spans[run_id_str] = span
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -1099,8 +1087,8 @@ try:
                     "tool",
                     "start",
                     user_id=user_id,
-                    run_id=run_id_str,
-                    parent_run_id=str(parent_run_id),
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     name=name,
                     input=input_str,
                     tags=tags,
@@ -1124,9 +1112,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
                 self.__track_event(
                     "tool",
                     "end",
@@ -1151,17 +1137,7 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                run_id_str = str(run_id)
-                if parent_run_id and spans.get(str(parent_run_id)):
-                    parent = spans[str(parent_run_id)]
-                    context = self.__set_span_in_context(parent)
-                    span = self.__tracer.start_span("chain", context=context)
-                    spans[run_id_str] = span
-                else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("chain", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
-                    spans[run_id_str] = span
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 name = serialized.get("id", [None, None, None, None])[3] if len(serialized.get("id", [])) > 3 else None
                 type = "chain"
@@ -1188,8 +1164,8 @@ try:
                     type,
                     "start",
                     user_id=user_id,
-                    run_id=run_id_str,
-                    parent_run_id=parent_run_id,
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     name=name,
                     input=input,
                     tags=tags,
@@ -1211,9 +1187,7 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
 
                 output = _parse_output(outputs)
 
@@ -1238,9 +1212,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
+
                 output = _parse_output(finish.return_values)
 
                 self.__track_event(
@@ -1264,9 +1237,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
+
                 self.__track_event(
                     "chain",
                     "error",
@@ -1288,9 +1260,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
+  
                 self.__track_event(
                     "tool",
                     "error",
@@ -1312,9 +1283,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                span = spans.get(str(run_id))
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run_id = run_manager.end_run(run_id)
+
                 self.__track_event(
                     "llm",
                     "error",
@@ -1336,17 +1306,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run_id_str = str(run_id)
-                if parent_run_id and spans.get(str(parent_run_id)):
-                    parent = spans[str(parent_run_id)]
-                    context = self.__set_span_in_context(parent)
-                    span = self.__tracer.start_span("retriever", context=context)
-                    spans[run_id_str] = span
-                else:
-                    context = self.__set_span_in_context(self.__trace.get_current_span())
-                    span = self.__tracer.start_span("retriever", context=context)
-                    parent_run_id = getattr(getattr(span, "parent", None), "span_id", None)
-                    spans[run_id_str] = span
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(kwargs.get("metadata"))
                 user_props = _get_user_props(kwargs.get("metadata"))
@@ -1358,8 +1318,8 @@ try:
                     "start",
                     user_id=user_id,
                     user_props=user_props,
-                    run_id=run_id_str,
-                    parent_run_id=parent_run_id,
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     name=name,
                     input=query,
                     app_id=self.__app_id,
@@ -1377,11 +1337,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-
-                run_id_str = str(run_id)
-                span = spans.get(run_id_str)
-                if span and hasattr(span, "is_recording") and span.is_recording():
-                    span.end()
+                run = run_manager.start_run(run_id, parent_run_id)
 
                 # only report the metadata
                 doc_metadata = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
@@ -1389,8 +1345,8 @@ try:
                 self.__track_event(
                     "retriever",
                     "end",
-                    run_id=run_id_str,
-                    parent_run_id=parent_run_id,
+                    run_id=run.id,
+                    parent_run_id=run.parent_run_id,
                     output=doc_metadata,
                     app_id=self.__app_id,
                     callback_queue=self.queue,
@@ -1407,12 +1363,12 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run_id_str = str(run_id)
+                run_id = run_manager.end_run(run_id)
 
                 self.__track_event(
                     "retriever",
                     "error",
-                    run_id=run_id_str,
+                    run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
                     callback_queue=self.queue,
