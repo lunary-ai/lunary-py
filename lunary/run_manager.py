@@ -51,8 +51,11 @@ class RunManager:
   def _delete_run(self, run: Run) -> None:
     for child in run.children:
       self._delete_run(child)
+
     if run.parent_run_id:
       parent_run = self.runs.get(run.parent_run_id)
       if parent_run:
         parent_run.children.remove(run)
-    del self.runs[run.id]
+
+    if self.runs.get(run.id):
+      del self.runs[run.id]
