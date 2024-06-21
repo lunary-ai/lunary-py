@@ -1456,9 +1456,9 @@ async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: 
     return data
 
 
-def render_template(slug: str, data = {}):
+def render_template(slug: str, data = {},  app_id: str | None = None, api_url: str | None = None):
     try:
-        raw_template = get_raw_template(slug)
+        raw_template = get_raw_template(slug, app_id, api_url)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
             raise Exception("Template not found, are the project ID and slug correct?")
@@ -1496,9 +1496,9 @@ def render_template(slug: str, data = {}):
     except Exception as e:
         logging.exception(f"Error rendering template {e}")
 
-async def render_template_async(slug: str, data={}):
+async def render_template_async(slug: str, data={}, app_id: str | None = None, api_url: str | None = None):
     try:
-        raw_template = await get_raw_template_async(slug)
+        raw_template = await get_raw_template_async(slug, app_id, api_url)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
             raise Exception("Template not found, are the project ID and slug correct?")
@@ -1539,11 +1539,11 @@ async def render_template_async(slug: str, data={}):
     except Exception as e:
         logging.exception(f"Error rendering template {e}")
 
-def get_langchain_template(slug: str):
+def get_langchain_template(slug: str,  app_id: str | None = None, api_url: str | None = None):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
-        raw_template = get_raw_template(slug)
+        raw_template = get_raw_template(slug, app_id, api_url)
 
         if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
             raise Exception("Template not found, are the project ID and slug correct?")
@@ -1558,13 +1558,10 @@ def get_langchain_template(slug: str):
         if text_mode:
             # replace {{ variables }} with { variables }
             rendered = replace_double_braces(content)
-
             template = PromptTemplate.from_template(rendered)
-
             return template
 
         else:
-
             messages = []
 
             # Return array of messages: 
