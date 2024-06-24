@@ -104,13 +104,15 @@ def track_event(
     params=None,
     runtime=None,
     app_id=None,
+    api_url=None,
     callback_queue=None,
     is_openai=False
 ):
     try:
         config = get_config()
         app_id = app_id or config.app_id 
-
+        api_url = api_url or config.api_url
+        
         if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
@@ -865,10 +867,12 @@ try:
         """
 
         __app_id: str
+        __api_url: str
 
         def __init__(
             self,
-            app_id: Union[str, None] = None
+            app_id: Union[str, None] = None,
+            api_url: Union[str, None] = None,
         ) -> None:
             super().__init__()
             config = get_config()
@@ -907,6 +911,8 @@ try:
                 )
                 self.__has_valid_config = False
             
+            self.__api_url = api_url or config.api_url or None
+
             self.queue = queue 
 
             if self.__has_valid_config is False:
@@ -962,6 +968,7 @@ try:
                     params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1018,6 +1025,7 @@ try:
                     params=params,
                     user_props=user_props,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1058,6 +1066,7 @@ try:
                         "completion": token_usage.get("completion_tokens"),
                     },
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1095,6 +1104,7 @@ try:
                     metadata=metadata,
                     user_props=user_props,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1119,6 +1129,7 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1172,6 +1183,7 @@ try:
                     metadata=metadata,
                     user_props=user_props,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1197,6 +1209,7 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1222,6 +1235,7 @@ try:
                     run_id=run_id,
                     output=output,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1245,6 +1259,7 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1268,6 +1283,7 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1291,6 +1307,7 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1323,6 +1340,7 @@ try:
                     name=name,
                     input=query,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1349,6 +1367,7 @@ try:
                     parent_run_id=run.parent_run_id,
                     output=doc_metadata,
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1371,6 +1390,7 @@ try:
                     run_id=run_id,
                     error={"message": str(error), "stack": traceback.format_exc()},
                     app_id=self.__app_id,
+                    api_url=self.__api_url,
                     callback_queue=self.queue,
                     runtime="langchain-py"
                 )
@@ -1539,7 +1559,7 @@ async def render_template_async(slug: str, data={}, app_id: str | None = None, a
     except Exception as e:
         logging.exception(f"Error rendering template {e}")
 
-def get_langchain_template(slug: str,  app_id: str | None = None, api_url: str | None = None):
+def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | None = None):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
@@ -1581,11 +1601,11 @@ def get_langchain_template(slug: str,  app_id: str | None = None, api_url: str |
     except Exception as e:
         logger.exception(f"Error fetching template: {e}")
 
-async def get_langchain_template_async(slug):
+async def get_langchain_template_async(slug, app_id: str | None = None, api_url: str | None = None):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
-        raw_template = await get_raw_template_async(slug)
+        raw_template = await get_raw_template_async(slug, app_id, api_url)
 
         if raw_template.get('message') == 'Template not found, is the project ID correct?':
             raise Exception("Template not found, are the project ID and slug correct?")
@@ -1661,7 +1681,7 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
 
 
 
-def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id=None, api_url=None):
+def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id: str | None = None, api_url: str | None = None):
     config = get_config()
     token = app_id or config.app_id 
     api_url = api_url or config.api_url 
