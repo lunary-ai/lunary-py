@@ -52,6 +52,10 @@ class RunContextManager:
 def run_context(id: str) -> RunContextManager:
     return RunContextManager(id)
 
+
+class LunaryException(Exception):
+    pass
+
 def get_parent():
   parent = parent_ctx.get()
   if parent and parent.get("retrieved", False) == False:
@@ -1645,6 +1649,30 @@ async def get_langchain_template_async(slug, app_id: str | None = None, api_url:
 
     except Exception as e:
         logger.exception(f"Error fetching template: {e}")
+
+
+def get_live_templates(app_id: str | None = None, api_url: str | None = None):
+    try: 
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url 
+
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+
+        response = requests.get(url=f"{api_url}/v1/templates/latest",
+                                headers=headers,  
+                                verify=config.ssl_verify)
+        if not response.ok:
+            logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
+
+        templates = response.json()
+        return templates
+    except Exception as e:
+        raise LunaryException(f"An error occurred fetching templates: {str(e)}") from e
+
 
 import humps
 
