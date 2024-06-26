@@ -906,18 +906,25 @@ try:
 
             self.__has_valid_config = True
 
-
-            self.__app_id = app_id or config.app_id 
+            if app_id:
+                self.__app_id = app_id
+                set_config(app_id=app_id)
+            else:
+                self.__app_id = config.app_id
+            # self.__app_id = app_id or config.app_id
             if self.__app_id is None:
                 logger.warning(
                     """app_id must be provided either as an argument or 
                     as an environment variable"""
                 )
                 self.__has_valid_config = False
-            
-            self.__api_url = api_url or config.api_url or None
-
-            self.queue = queue 
+            if api_url:
+                self.__api_url = api_url
+                set_config(api_url=api_url)
+            else:
+                self.__api_url = config.api_url or DEFAULT_API_URL
+            # self.__api_url = api_url or config.api_url or DEFAULT_API_URL
+            self.queue = queue
 
             if self.__has_valid_config is False:
                 return None
