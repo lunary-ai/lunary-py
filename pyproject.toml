@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lunary"
-version = "1.0.36"
+version = "1.0.37"
 description = "Observability, analytics and evaluations for AI agents and chatbots."
 authors = ["lunary <hello@lunary.ai>"]
 readme = "README.md"
@@ -9,7 +9,7 @@ documentation = "https://lunary.ai/docs/py"
 keywords = ["Lunary", "lunary.ai", "Langchain", "AI", "Analytics", "Monitoring"]
 
 [tool.poetry.dependencies]
-python = "^3.8.1"
+python = "^3.10.0"
 requests = "^2.31.0"
 setuptools = "^67.6.2"
 tenacity = "^8.2.3"
