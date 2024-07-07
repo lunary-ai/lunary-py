@@ -135,6 +135,12 @@ async def __async_stream_handler(method, run_id, name, type, *args, **kwargs):
     )
 
 
+def __metadata_parser(metadata):
+    return {
+        x: metadata[x] for x in metadata if x in ["user_id"]
+    }
+
+
 def __wrap_sync(method: t.Callable,
                 type: t.Optional[str] = None,
                 user_id: t.Optional[str] = None,
@@ -145,6 +151,7 @@ def __wrap_sync(method: t.Callable,
                 input_parser=__input_parser,
                 output_parser=__output_parser,
                 stream_handler=__stream_handler,
+                metadata_parser=__metadata_parser,
                 *args,
                 **kwargs):
     output = None
@@ -158,6 +165,9 @@ def __wrap_sync(method: t.Callable,
                 params = filter_params(kwargs)
                 metadata = kwargs.get("metadata")
                 parsed_input = input_parser(kwargs)
+
+                if metadata:
+                    kwargs["metadata"] = metadata_parser(metadata)
 
                 track_event(type,
                             "start",
@@ -230,6 +240,7 @@ async def __wrap_async(method: t.Callable,
                        input_parser=__input_parser,
                        output_parser=__output_parser,
                        stream_handler=__async_stream_handler,
+                       metadata_parser=__metadata_parser,
                        *args,
                        **kwargs):
     output = None
@@ -243,6 +254,9 @@ async def __wrap_async(method: t.Callable,
                 params = filter_params(kwargs)
                 metadata = kwargs.get("metadata")
                 parsed_input = input_parser(kwargs)
+
+                if metadata:
+                    kwargs["metadata"] = metadata_parser(metadata)
 
                 track_event(type,
                             "start",
