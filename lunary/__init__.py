@@ -1455,6 +1455,49 @@ async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: 
     templateCache[slug] = {'timestamp': now, 'data': data}
     return data
 
+def get_templates(live_only: Optional[bool] = False, app_id: Optional[str] = None, api_url: Optional[str] = None):
+    config = get_config()
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    response = requests.get(
+        f"{api_url}/v1/templates{'?live=true' if live_only else ''}", 
+        headers=headers, verify=config.ssl_verify
+    )
+    if not response.ok:
+        logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
+
+    data = response.json()
+
+async def get_templates_async(live_only: Optional[bool]=False, app_id: Optional[str] = None, api_url: Optional[str] = None):
+    config = get_config()
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{api_url}/v1/templates{'?live=true' if live_only else ''}",
+            headers=headers
+        ) as response:
+            if not response.ok:
+                raise Exception(f"Lunary: Error fetching template: {response.status} - {await response.text()}")
+
+            data = await response.json()
+
+def get_langchain_templates(app_id: Optional[str] = None, api_url: Optional[str] = None):
+    config = get_config()
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
 
 def render_template(slug: str, data = {}):
     try:
