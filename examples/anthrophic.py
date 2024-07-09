@@ -69,6 +69,41 @@ async def test_async_streaming():
         print(event)
 
 
+def test_sync_stream_helper():
+    client = Anthropic()
+    monitor(client)
+
+    with client.messages.stream(
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": "Hello, Claude",
+        }],
+        model="claude-3-opus-20240229",
+    ) as stream:
+        for event in stream:
+            print(event)
+
+async def test_async_stream_helper():
+    client = monitor(AsyncAnthropic())
+
+    async with client.messages.stream(
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "user",
+                "content": "Say hello there!",
+            }
+        ],
+        model="claude-3-opus-20240229",
+    ) as stream:
+        async for event in stream:
+            print(event)
+
+    message = await stream.get_final_message()
+    print(message.to_json())
+
+
 def test_extra_arguments():
     client = Anthropic()
     monitor(client)
@@ -100,4 +135,7 @@ def test_extra_arguments():
 # test_sync_streaming()
 # test_asyncio.run(async_streaming())
 
-test_extra_arguments()
+# test_extra_arguments()
+
+# test_sync_stream_helper()
+asyncio.run(test_async_stream_helper())
