@@ -7,11 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import jsonpickle
 
-from .parsers import (
-    default_input_parser,
-    default_output_parser,
-    filter_params
-)
+from .parsers import default_input_parser, default_output_parser, filter_params
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .thread import Thread
@@ -19,10 +15,14 @@ from .utils import clean_nones, create_uuid_from_string
 from .config import get_config, set_config
 from .run_manager import RunManager
 
-from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
+from .users import (
+    user_ctx,
+    user_props_ctx,
+    identify,
+)  # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
-from .parent import parent_ctx, parent, get_parent # DO NOT REMOVE `parent` import
-from .project import project_ctx # DO NOT REMOVE `project` import
+from .parent import parent_ctx, parent, get_parent  # DO NOT REMOVE `parent` import
+from .project import project_ctx  # DO NOT REMOVE `project` import
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -31,13 +31,14 @@ logger.setLevel(logging.INFO)
 
 event_queue_ctx = ContextVar("event_queue_ctx")
 event_queue_ctx.set(EventQueue())
-queue = event_queue_ctx.get() 
+queue = event_queue_ctx.get()
 
 run_manager = RunManager()
 
 from contextvars import ContextVar
 
 run_ctx = ContextVar("run_ctx", default=None)
+
 
 class RunContextManager:
     def __init__(self, run_id: str):
@@ -49,6 +50,7 @@ class RunContextManager:
     def __exit__(self, exc_type, exc_value, exc_tb):
         run_ctx.set(None)
 
+
 def run_context(id: str) -> RunContextManager:
     return RunContextManager(id)
 
@@ -56,16 +58,21 @@ def run_context(id: str) -> RunContextManager:
 class LunaryException(Exception):
     pass
 
+
 def get_parent():
-  parent = parent_ctx.get()
-  if parent and parent.get("retrieved", False) == False:
-    parent_ctx.set({"message_id": parent["message_id"], "retrieved": True})
-    return parent.get("message_id", None)
-  return None
+    parent = parent_ctx.get()
+    if parent and parent.get("retrieved", False) == False:
+        parent_ctx.set({"message_id": parent["message_id"], "retrieved": True})
+        return parent.get("message_id", None)
+    return None
 
 
-
-def config(app_id: str | None = None, verbose: str | None = None, api_url: str | None = None, disable_ssl_verify: bool | None = None):
+def config(
+    app_id: str | None = None,
+    verbose: str | None = None,
+    api_url: str | None = None,
+    disable_ssl_verify: bool | None = None,
+):
     set_config(app_id, verbose, api_url, disable_ssl_verify)
 
 
@@ -85,6 +92,7 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
 
     if parent_run_id is not None:
         return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
+
 
 def track_event(
     run_type,
@@ -110,20 +118,22 @@ def track_event(
     app_id=None,
     api_url=None,
     callback_queue=None,
-    is_openai=False
+    is_openai=False,
 ):
     try:
         config = get_config()
-        app_id = app_id or config.app_id 
+        app_id = app_id or config.app_id
         api_url = api_url or config.api_url
-        
+
         if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
-        parent_run_id = get_parent_run_id(parent_run_id, run_type, app_id=app_id, run_id=run_id) 
+        parent_run_id = get_parent_run_id(
+            parent_run_id, run_type, app_id=app_id, run_id=run_id
+        )
 
-        # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use 
-        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))  
+        # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use
+        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))
 
         event = {
             "event": event_name,
@@ -134,7 +144,7 @@ def track_event(
             "tags": tags or tags_ctx.get(),
             "threadTags": thread_tags,
             "runId": run_id,
-            "parentRunId": parent_run_id, 
+            "parentRunId": parent_run_id,
             "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
             "message": message,
             "input": input,
@@ -146,9 +156,8 @@ def track_event(
             "metadata": metadata,
             "params": params,
             "templateId": template_id,
-            "appId": app_id
+            "appId": app_id,
         }
-
 
         if callback_queue is not None:
             callback_queue.append(event)
@@ -157,8 +166,10 @@ def track_event(
 
         if config.verbose:
             event_copy = clean_nones(copy.deepcopy(event))
-            logger.info(f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n")
-        
+            logger.info(
+                f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n"
+            )
+
     except Exception as e:
         logger.exception("Error in `track_event`", e)
 
@@ -206,8 +217,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
                 choices[index]["message"]["function_call"]["name"] = function_call.name
 
             if hasattr(function_call, "arguments"):
-                choices[index]["message"]["function_call"].setdefault(
-                    "arguments", "")
+                choices[index]["message"]["function_call"].setdefault("arguments", "")
                 choices[index]["message"]["function_call"][
                     "arguments"
                 ] += function_call.arguments
@@ -252,6 +262,7 @@ def stream_handler(fn, run_id, name, type, *args, **kwargs):
     )
     return
 
+
 async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
     stream = await fn(*args, **kwargs)
 
@@ -294,8 +305,7 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
             choices[index]["message"]["function_call"]["name"] = function_call.name
 
         if hasattr(function_call, "arguments"):
-            choices[index]["message"]["function_call"].setdefault(
-                "arguments", "")
+            choices[index]["message"]["function_call"].setdefault("arguments", "")
             choices[index]["message"]["function_call"][
                 "arguments"
             ] += function_call.arguments
@@ -306,8 +316,8 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
                     (
                         index
                         for (index, tc) in enumerate(
-                        choices[index]["message"]["tool_calls"]
-                    )
+                            choices[index]["message"]["tool_calls"]
+                        )
                         if tc.index == tool_call.index
                     ),
                     -1,
@@ -321,7 +331,7 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
                     existing_call_index
                 ]
                 if hasattr(tool_call, "function") and hasattr(
-                        tool_call.function, "arguments"
+                    tool_call.function, "arguments"
                 ):
                     existing_call.function.arguments += tool_call.function.arguments
 
@@ -337,6 +347,7 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
         token_usage={"completion": tokens, "prompt": None},
     )
     return
+
 
 def wrap(
     fn,
@@ -369,16 +380,19 @@ def wrap(
                         parent_run_id=parent_run_id,
                         input=parsed_input["input"],
                         name=name or parsed_input["name"],
-                        user_id=kwargs.pop(
-                            "user_id", None) or user_ctx.get() or user_id,
+                        user_id=kwargs.pop("user_id", None)
+                        or user_ctx.get()
+                        or user_id,
                         user_props=kwargs.pop("user_props", None)
                         or user_props
                         or user_props_ctx.get(),
                         params=params,
                         metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
-                        is_openai=True
+                        template_id=kwargs.get("extra_headers", {}).get(
+                            "Template-Id", None
+                        ),
+                        is_openai=True,
                     )
                 except Exception as e:
                     logging.exception(e)
@@ -403,8 +417,7 @@ def wrap(
                     raise e
 
                 try:
-                    parsed_output = output_parser(
-                        output, kwargs.get("stream", False))
+                    parsed_output = output_parser(output, kwargs.get("stream", False))
 
                     track_event(
                         type,
@@ -458,16 +471,18 @@ def async_wrap(
                         parent_run_id=parent_run_id,
                         input=parsed_input["input"],
                         name=name or parsed_input["name"],
-                        user_id=kwargs.pop(
-                            "user_id", None
-                        ) or user_ctx.get() or user_id,
+                        user_id=kwargs.pop("user_id", None)
+                        or user_ctx.get()
+                        or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                    or user_props
-                                    or user_props_ctx.get(),
+                        or user_props
+                        or user_props_ctx.get(),
                         params=params,
                         metadata=metadata,
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
+                        template_id=kwargs.get("extra_headers", {}).get(
+                            "Template-Id", None
+                        ),
                     )
                 except Exception as e:
                     logger.exception(e)
@@ -487,18 +502,16 @@ def async_wrap(
                     raise e
 
                 try:
-                    parsed_output = output_parser(
-                        output, kwargs.get("stream", False)
-                    )
+                    parsed_output = output_parser(output, kwargs.get("stream", False))
 
                     track_event(
                         type,
                         "end",
                         run.id,
                         name=name
-                                or parsed_input[
-                                    "name"
-                                ],  # Need name in case need to compute tokens usage server side
+                        or parsed_input[
+                            "name"
+                        ],  # Need name in case need to compute tokens usage server side
                         output=parsed_output["output"],
                         token_usage=parsed_output["tokensUsage"],
                     )
@@ -510,11 +523,10 @@ def async_wrap(
             finally:
                 run_manager.end_run(run.id)
 
-
         def async_stream_wrapper(*args, **kwargs):
             parent_run_id = kwargs.pop("parent", None)
             run = run_manager.start_run(parent_run_id=parent_run_id)
-            
+
             try:
                 try:
                     params = filter_params(kwargs)
@@ -524,25 +536,29 @@ def async_wrap(
                     track_event(
                         type,
                         "start",
-                        run_id= run.id,
+                        run_id=run.id,
                         parent_run_id=parent_run_id,
                         input=parsed_input["input"],
                         name=name or parsed_input["name"],
-                        user_id=kwargs.pop(
-                            "user_id", None
-                        ) or user_ctx.get() or user_id,
+                        user_id=kwargs.pop("user_id", None)
+                        or user_ctx.get()
+                        or user_id,
                         user_props=kwargs.pop("user_props", None)
-                                    or user_props
-                                    or user_props_ctx.get(),
+                        or user_props
+                        or user_props_ctx.get(),
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         params=params,
                         metadata=metadata,
-                        template_id=kwargs.get("extra_headers", {}).get("Template-Id", None),
+                        template_id=kwargs.get("extra_headers", {}).get(
+                            "Template-Id", None
+                        ),
                     )
                 except Exception as e:
                     logger.exception(e)
 
-                return async_stream_handler(fn, run.id, name or parsed_input["name"], type, *args, **kwargs)
+                return async_stream_handler(
+                    fn, run.id, name or parsed_input["name"], type, *args, **kwargs
+                )
             finally:
                 run_manager.end_run(run.id)
 
@@ -557,8 +573,7 @@ def async_wrap(
 def monitor(object):
     try:
         openai_version = parse_version(version("openai"))
-        name = getattr(object, "__name__", getattr(
-            type(object), "__name__", None))
+        name = getattr(object, "__name__", getattr(type(object), "__name__", None))
 
         if openai_version >= parse_version("1.0.0") and openai_version < parse_version(
             "2.0.0"
@@ -665,7 +680,7 @@ try:
     import requests
     from langchain_core.agents import AgentFinish
     from langchain_core.callbacks import BaseCallbackHandler
-    from langchain_core.messages import BaseMessage, BaseMessageChunk, ToolMessage 
+    from langchain_core.messages import BaseMessage, BaseMessageChunk, ToolMessage
     from langchain_core.documents import Document
     from langchain_core.outputs import LLMResult
     from langchain_core.load import dumps
@@ -711,7 +726,6 @@ try:
             user_ctx.set(None)
             user_props_ctx.set(None)
 
-
     def identify(user_id: str, user_props: Any = None) -> UserContextManager:
         """Builds a Lunary UserContextManager
 
@@ -724,12 +738,11 @@ try:
         """
         return UserContextManager(user_id, user_props)
 
-
     def _serialize(data: Any):
         if not data:
             return None
-            
-        if hasattr(data, 'messages'):
+
+        if hasattr(data, "messages"):
             return _serialize(data.messages)
         if isinstance(data, BaseMessage) or isinstance(data, BaseMessageChunk):
             return _parse_lc_message(data)
@@ -748,21 +761,18 @@ try:
     def _parse_input(raw_input: Any) -> Any:
         serialized = _serialize(raw_input)
         if isinstance(serialized, dict):
-            if serialized.get('input'):
+            if serialized.get("input"):
                 return serialized["input"]
 
         return serialized
 
-    
-
     def _parse_output(raw_output: dict) -> Any:
         serialized = _serialize(raw_output)
         if isinstance(serialized, dict):
-            if serialized.get('output'):
+            if serialized.get("output"):
                 return serialized["output"]
 
         return serialized
-
 
     def _parse_lc_role(
         role: str,
@@ -774,7 +784,6 @@ try:
         else:
             return role
 
-
     def _get_user_id(metadata: Any) -> Any:
         if user_ctx.get() is not None:
             return user_ctx.get()
@@ -783,7 +792,6 @@ try:
         user_id = metadata.get("user_id")
         return user_id
 
-
     def _get_user_props(metadata: Any) -> Any:
         if user_props_ctx.get() is not None:
             return user_props_ctx.get()
@@ -791,15 +799,14 @@ try:
         metadata = metadata or {}
         return metadata.get("user_props", None)
 
-
     def _parse_tool_call(tool_call: Dict[str, Any]):
         tool_call = {
             "id": tool_call.get("id"),
             "type": "function",
             "function": {
                 "name": tool_call.get("name"),
-                "arguments": str(tool_call.get("args"))
-            }
+                "arguments": str(tool_call.get("args")),
+            },
         }
         return tool_call
 
@@ -812,18 +819,18 @@ try:
         }
         return tool_message
 
-
     def _parse_lc_message(message: BaseMessage) -> Dict[str, Any]:
-        if message.type == 'tool':
+        if message.type == "tool":
             return _parse_tool_message(message)
 
         parsed = {"content": message.content, "role": _parse_lc_role(message.type)}
 
         # For tool calls in input
-        tool_calls = getattr(message, 'tool_calls', None)
+        tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
-            parsed["tool_calls"] = [_parse_tool_call(tool_call) for tool_call in tool_calls]
-
+            parsed["tool_calls"] = [
+                _parse_tool_call(tool_call) for tool_call in tool_calls
+            ]
 
         # For tool calls in output
         keys = ["function_call", "tool_calls", "tool_call_id", "name"]
@@ -837,10 +844,10 @@ try:
 
         return parsed
 
-
-    def _parse_lc_messages(messages: Union[List[BaseMessage], Any]) -> List[Dict[str, Any]]:
+    def _parse_lc_messages(
+        messages: Union[List[BaseMessage], Any]
+    ) -> List[Dict[str, Any]]:
         return [_parse_lc_message(message) for message in messages]
-
 
     class LunaryCallbackHandler(BaseCallbackHandler):
         """Callback Handler for Lunary`.
@@ -906,22 +913,20 @@ try:
 
             self.__has_valid_config = True
 
-
-            self.__app_id = app_id or config.app_id 
+            self.__app_id = app_id or config.app_id
             if self.__app_id is None:
                 logger.warning(
                     """app_id must be provided either as an argument or 
                     as an environment variable"""
                 )
                 self.__has_valid_config = False
-            
+
             self.__api_url = api_url or config.api_url or None
 
-            self.queue = queue 
+            self.queue = queue
 
             if self.__has_valid_config is False:
                 return None
-
 
         def on_llm_start(
             self,
@@ -974,11 +979,10 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_start`: {e}")
-
 
         def on_chat_model_start(
             self,
@@ -1031,11 +1035,10 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chat_model_start`: {e}")
-
 
         def on_llm_end(
             self,
@@ -1050,9 +1053,11 @@ try:
 
                 token_usage = (response.llm_output or {}).get("token_usage", {})
                 parsed_output: Any = [
-                    _parse_lc_message(generation.message)
-                    if hasattr(generation, "message")
-                    else generation.text
+                    (
+                        _parse_lc_message(generation.message)
+                        if hasattr(generation, "message")
+                        else generation.text
+                    )
                     for generation in response.generations[0]
                 ]
 
@@ -1072,11 +1077,10 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_end`: {e}")
-
 
         def on_tool_start(
             self,
@@ -1110,11 +1114,10 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_start`: {e}")
-
 
         def on_tool_end(
             self,
@@ -1135,7 +1138,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_end`: {e}")
@@ -1154,7 +1157,11 @@ try:
             try:
                 run = run_manager.start_run(run_id, parent_run_id)
 
-                name = serialized.get("id", [None, None, None, None])[3] if len(serialized.get("id", [])) > 3 else None
+                name = (
+                    serialized.get("id", [None, None, None, None])[3]
+                    if len(serialized.get("id", [])) > 3
+                    else None
+                )
                 type = "chain"
                 metadata = metadata or {}
 
@@ -1189,7 +1196,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_start`: {e}")
@@ -1215,7 +1222,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_end`: {e}")
@@ -1241,7 +1248,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_agent_finish`: {e}")
@@ -1265,7 +1272,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_chain_error`: {e}")
@@ -1280,7 +1287,7 @@ try:
         ) -> Any:
             try:
                 run_id = run_manager.end_run(run_id)
-  
+
                 self.__track_event(
                     "tool",
                     "error",
@@ -1289,7 +1296,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_tool_error`: {e}")
@@ -1313,7 +1320,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_llm_error`: {e}")
@@ -1346,7 +1353,7 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_start`: {e}")
@@ -1362,7 +1369,14 @@ try:
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 # only report the metadata
-                doc_metadata = [doc.metadata if doc.metadata else {'summary': doc.page_content[:100]} for doc in documents]
+                doc_metadata = [
+                    (
+                        doc.metadata
+                        if doc.metadata
+                        else {"summary": doc.page_content[:100]}
+                    )
+                    for doc in documents
+                ]
 
                 self.__track_event(
                     "retriever",
@@ -1373,11 +1387,11 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_end`: {e}")
-            
+
         def on_retriever_error(
             self,
             error: BaseException,
@@ -1396,14 +1410,16 @@ try:
                     app_id=self.__app_id,
                     api_url=self.__api_url,
                     callback_queue=self.queue,
-                    runtime="langchain-py"
+                    runtime="langchain-py",
                 )
             except Exception as e:
                 logger.exception(f"An error occurred in `on_retriever_error`: {e}")
 
 except Exception as e:
-    # Do not raise error for users that do not have Langchain installed 
+    logger.warn("Please install langchain in order to use `LunaryCallbackHandler`")
+    # Do not raise error for users that do not have Langchain installed
     pass
+
 
 def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):
     return Thread(track_event=track_event, id=id, tags=tags)
@@ -1421,158 +1437,160 @@ def track_feedback(run_id: str, feedback: Dict[str, Any]):
     track_event(None, "feedback", run_id=run_id, feedback=feedback)
 
 
-
 templateCache = {}
 
-def get_raw_template(slug: str,  app_id: str | None = None, api_url: str | None = None):
+
+def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None = None):
     config = get_config()
     token = app_id or config.app_id
-    api_url = api_url or config.api_url 
+    api_url = api_url or config.api_url
 
     global templateCache
     now = time.time() * 1000
     cache_entry = templateCache.get(slug)
 
-    if cache_entry and now - cache_entry['timestamp'] < 60000:
-        return cache_entry['data']
+    if cache_entry and now - cache_entry["timestamp"] < 60000:
+        return cache_entry["data"]
 
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    response = requests.get(f"{api_url}/v1/template_versions/latest?slug={slug}", 
-                            headers=headers,  
-                            verify=config.ssl_verify)
+    response = requests.get(
+        f"{api_url}/v1/template_versions/latest?slug={slug}",
+        headers=headers,
+        verify=config.ssl_verify,
+    )
     if not response.ok:
-        logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
+        logger.exception(
+            f"Error fetching template: {response.status_code} - {response.text}"
+        )
 
     data = response.json()
-    templateCache[slug] = {'timestamp': now, 'data': data}
+    templateCache[slug] = {"timestamp": now, "data": data}
     return data
 
-async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: str | None = None):
+
+async def get_raw_template_async(
+    slug: str, app_id: str | None = None, api_url: str | None = None
+):
     config = get_config()
     token = app_id or config.app_id
-    api_url = api_url or config.api_url 
-
+    api_url = api_url or config.api_url
 
     global templateCache
     now = time.time() * 1000
     cache_entry = templateCache.get(slug)
 
-    if cache_entry and now - cache_entry['timestamp'] < 60000:
-        return cache_entry['data']
+    if cache_entry and now - cache_entry["timestamp"] < 60000:
+        return cache_entry["data"]
 
-    headers = {
-        'Authorization': f'Bearer {token}',
-        'Content-Type': 'application/json'
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{api_url}/v1/template_versions/latest?slug={slug}", headers=headers) as response:
+        async with session.get(
+            f"{api_url}/v1/template_versions/latest?slug={slug}", headers=headers
+        ) as response:
             if not response.ok:
-                raise Exception(f"Lunary: Error fetching template: {response.status} - {await response.text()}")
+                raise Exception(
+                    f"Lunary: Error fetching template: {response.status} - {await response.text()}"
+                )
 
             data = await response.json()
 
-    templateCache[slug] = {'timestamp': now, 'data': data}
+    templateCache[slug] = {"timestamp": now, "data": data}
     return data
 
 
-def render_template(slug: str, data = {},  app_id: str | None = None, api_url: str | None = None):
+def render_template(
+    slug: str, data={}, app_id: str | None = None, api_url: str | None = None
+):
     try:
         raw_template = get_raw_template(slug, app_id, api_url)
 
-        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+        if (
+            raw_template.get("message")
+            == "Template not found, is the project ID correct?"
+        ):
             raise Exception("Template not found, are the project ID and slug correct?")
 
-        template_id = copy.deepcopy(raw_template['id'])
-        content = copy.deepcopy(raw_template['content'])
-        extra = copy.deepcopy(raw_template['extra'])
+        template_id = copy.deepcopy(raw_template["id"])
+        content = copy.deepcopy(raw_template["content"])
+        extra = copy.deepcopy(raw_template["extra"])
 
         text_mode = isinstance(content, str)
 
         # extra_headers is safe with OpenAI to be used to pass value
-        extra_headers = {
-            "Template-Id": str(template_id)
-        }
+        extra_headers = {"Template-Id": str(template_id)}
 
         result = None
         if text_mode:
             rendered = chevron.render(content, data)
-            result = {
-                "text": rendered, "extra_headers": extra_headers, **extra
-            }
+            result = {"text": rendered, "extra_headers": extra_headers, **extra}
             return result
         else:
             messages = []
             for message in content:
                 message["content"] = chevron.render(message["content"], data)
                 messages.append(message)
-            result = {
-                "messages": messages, 
-                "extra_headers": extra_headers,
-                **extra
-            }
+            result = {"messages": messages, "extra_headers": extra_headers, **extra}
 
             return result
     except Exception as e:
         logging.exception(f"Error rendering template {e}")
 
-async def render_template_async(slug: str, data={}, app_id: str | None = None, api_url: str | None = None):
+
+async def render_template_async(
+    slug: str, data={}, app_id: str | None = None, api_url: str | None = None
+):
     try:
         raw_template = await get_raw_template_async(slug, app_id, api_url)
 
-        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+        if (
+            raw_template.get("message")
+            == "Template not found, is the project ID correct?"
+        ):
             raise Exception("Template not found, are the project ID and slug correct?")
 
-
-        template_id = copy.deepcopy(raw_template['id'])
-        content = copy.deepcopy(raw_template['content'])
-        extra = copy.deepcopy(raw_template['extra'])
+        template_id = copy.deepcopy(raw_template["id"])
+        content = copy.deepcopy(raw_template["content"])
+        extra = copy.deepcopy(raw_template["extra"])
 
         text_mode = isinstance(content, str)
 
         # extra_headers is safe with OpenAI to be used to pass value
-        extra_headers = {
-            "Template-Id": str(template_id)
-        }
+        extra_headers = {"Template-Id": str(template_id)}
 
         result = None
         if text_mode:
             rendered = chevron.render(content, data)
-            result = {
-                "text": rendered,
-                "extra_headers": extra_headers,
-                **extra
-            }
+            result = {"text": rendered, "extra_headers": extra_headers, **extra}
             return result
         else:
             messages = []
             for message in content:
                 message["content"] = chevron.render(message["content"], data)
                 messages.append(message)
-            result = {
-                "messages": messages,
-                "extra_headers": extra_headers,
-                **extra
-            }
+            result = {"messages": messages, "extra_headers": extra_headers, **extra}
 
             return result
     except Exception as e:
         logging.exception(f"Error rendering template {e}")
 
-def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | None = None):
+
+def get_langchain_template(
+    slug: str, app_id: str | None = None, api_url: str | None = None
+):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
         raw_template = get_raw_template(slug, app_id, api_url)
 
-        if(raw_template.get('message') == 'Template not found, is the project ID correct?'):
+        if (
+            raw_template.get("message")
+            == "Template not found, is the project ID correct?"
+        ):
             raise Exception("Template not found, are the project ID and slug correct?")
 
-        content = copy.deepcopy(raw_template['content'])
+        content = copy.deepcopy(raw_template["content"])
 
         def replace_double_braces(text):
             return text.replace("{{", "{").replace("}}", "}")
@@ -1588,7 +1606,7 @@ def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | 
         else:
             messages = []
 
-            # Return array of messages: 
+            # Return array of messages:
             #  [
             #     ("system", "You are a helpful AI bot. Your name is {name}."),
             #     ("human", "Hello, how are you doing?"),
@@ -1596,25 +1614,38 @@ def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | 
             #     ("human", "{user_input}"),
             # ]
             for message in content:
-                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+                messages.append(
+                    (
+                        message["role"]
+                        .replace("assistant", "ai")
+                        .replace("user", "human"),
+                        replace_double_braces(message["content"]),
+                    )
+                )
 
             template = ChatPromptTemplate.from_messages(messages)
 
             return template
-        
+
     except Exception as e:
         logger.exception(f"Error fetching template: {e}")
 
-async def get_langchain_template_async(slug, app_id: str | None = None, api_url: str | None = None):
+
+async def get_langchain_template_async(
+    slug, app_id: str | None = None, api_url: str | None = None
+):
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
         raw_template = await get_raw_template_async(slug, app_id, api_url)
 
-        if raw_template.get('message') == 'Template not found, is the project ID correct?':
+        if (
+            raw_template.get("message")
+            == "Template not found, is the project ID correct?"
+        ):
             raise Exception("Template not found, are the project ID and slug correct?")
 
-        content = copy.deepcopy(raw_template['content'])
+        content = copy.deepcopy(raw_template["content"])
 
         def replace_double_braces(text):
             return text.replace("{{", "{").replace("}}", "}")
@@ -1641,7 +1672,14 @@ async def get_langchain_template_async(slug, app_id: str | None = None, api_url:
             # ]
 
             for message in content:
-                messages.append((message["role"].replace("assistant", "ai").replace('user', 'human'), replace_double_braces(message["content"])))
+                messages.append(
+                    (
+                        message["role"]
+                        .replace("assistant", "ai")
+                        .replace("user", "human"),
+                        replace_double_braces(message["content"]),
+                    )
+                )
 
             template = ChatPromptTemplate.from_messages(messages)
 
@@ -1652,21 +1690,25 @@ async def get_langchain_template_async(slug, app_id: str | None = None, api_url:
 
 
 def get_live_templates(app_id: str | None = None, api_url: str | None = None):
-    try: 
+    try:
         config = get_config()
         token = app_id or config.app_id
-        api_url = api_url or config.api_url 
+        api_url = api_url or config.api_url
 
         headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
         }
 
-        response = requests.get(url=f"{api_url}/v1/templates/latest",
-                                headers=headers,  
-                                verify=config.ssl_verify)
+        response = requests.get(
+            url=f"{api_url}/v1/templates/latest",
+            headers=headers,
+            verify=config.ssl_verify,
+        )
         if not response.ok:
-            logger.exception(f"Error fetching template: {response.status_code} - {response.text}")
+            logger.exception(
+                f"Error fetching template: {response.status_code} - {response.text}"
+            )
 
         templates = response.json()
         return templates
@@ -1676,30 +1718,32 @@ def get_live_templates(app_id: str | None = None, api_url: str | None = None):
 
 import humps
 
+
 class DatasetItem:
     def __init__(self, d=None):
         if d is not None:
             for key, value in d.items():
                 setattr(self, key, value)
 
+
 def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None):
     config = get_config()
-    token = app_id or config.app_id 
-    api_url = api_url or config.api_url 
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
 
     try:
         url = f"{api_url}/v1/datasets/{slug}"
         headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
         }
         response = requests.get(url, headers=headers, verify=config.ssl_verify)
         if response.ok:
             dataset = response.json()
             dataset = humps.decamelize(dataset)
-            items_data = dataset.get('items', [])
+            items_data = dataset.get("items", [])
             items = [DatasetItem(d=item) for item in items_data]
-            
+
             return items
         else:
             raise Exception(f"Status code: {response.status_code}")
@@ -1708,23 +1752,29 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
         logger.exception(f"Error fetching dataset {e}")
 
 
-
-def evaluate(checklist, input, output, ideal_output=None, context=None, model=None, duration=None, tags=None, app_id: str | None = None, api_url: str | None = None):
+def evaluate(
+    checklist,
+    input,
+    output,
+    ideal_output=None,
+    context=None,
+    model=None,
+    duration=None,
+    tags=None,
+    app_id: str | None = None,
+    api_url: str | None = None,
+):
     config = get_config()
-    token = app_id or config.app_id 
-    api_url = api_url or config.api_url 
+    token = app_id or config.app_id
+    api_url = api_url or config.api_url
 
     try:
         url = f"{api_url}/v1/evaluations/run"
         headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
         }
-        data = {
-            "checklist": checklist,
-            "input": input,
-            "output": output
-        }
+        data = {"checklist": checklist, "input": input, "output": output}
         if ideal_output is not None:
             data["idealOutput"] = ideal_output
         if context is not None:
@@ -1736,9 +1786,11 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         if tags is not None:
             data["tags"] = tags
 
-        response = requests.post(url, headers=headers, json=data, verify=config.ssl_verify)
+        response = requests.post(
+            url, headers=headers, json=data, verify=config.ssl_verify
+        )
         if response.status_code == 500:
-            error_message = response.json().get('message')
+            error_message = response.json().get("message")
             raise Exception(f"Evaluation error: {error_message}")
 
         data = humps.decamelize(response.json())
@@ -1748,5 +1800,7 @@ def evaluate(checklist, input, output, ideal_output=None, context=None, model=No
         return passed, results
 
     except Exception as e:
-        logger.exception("Error evaluating result. Please contact support@lunary.ai if the problem persists.")
+        logger.exception(
+            "Error evaluating result. Please contact support@lunary.ai if the problem persists."
+        )
         raise e
