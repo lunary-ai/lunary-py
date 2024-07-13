@@ -1416,8 +1416,7 @@ try:
                 logger.exception(f"An error occurred in `on_retriever_error`: {e}")
 
 except Exception as e:
-    logger.warn("Please install langchain in order to use `LunaryCallbackHandler`")
-    # Do not raise error for users that do not have Langchain installed
+    # Do not raise or print error for users that do not have Langchain installed
     pass
 
 
