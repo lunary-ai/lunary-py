@@ -17,7 +17,7 @@ from .event_queue import EventQueue
 from .thread import Thread
 from .utils import clean_nones, create_uuid_from_string
 from .config import get_config, set_config
-from .run_manager import RunManager
+from .run_manager import RunManager, Run
 
 from .users import user_ctx, user_props_ctx, identify # DO NOT REMOVE `identify`` import
 from .tags import tags_ctx, tags  # DO NOT REMOVE `tags` import
@@ -865,6 +865,7 @@ try:
         """
 
         __app_id: str
+        __run: Run
 
         def __init__(
             self,
@@ -908,6 +909,7 @@ try:
                 self.__has_valid_config = False
             
             self.queue = queue 
+            self.__run = None
 
             if self.__has_valid_config is False:
                 return None
@@ -925,7 +927,10 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run = run_manager.start_run(run_id, parent_run_id)
+                if not self.__run:
+                    self.__run = run_manager.start_run(run_id, parent_run_id)
+                
+                run = self.__run
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -981,7 +986,10 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
-                run = run_manager.start_run(run_id, parent_run_id)
+                if not self.__run:
+                    self.__run = run_manager.start_run(run_id, parent_run_id)
+                
+                run = self.__run
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -1034,7 +1042,7 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
-                run_id = run_manager.end_run(run_id)
+                run_id = run_manager.end_run(self.__run.id)
 
                 token_usage = (response.llm_output or {}).get("token_usage", {})
                 parsed_output: Any = [
