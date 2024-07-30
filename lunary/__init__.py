@@ -83,7 +83,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
     parent_run = run_ctx.get()
     if parent_run and parent_run != run_id:
         run_ctx.set(None)
-        print(parent_run)
         return str(create_uuid_from_string(str(parent_run) + str(app_id)))
 
     parent_from_ctx = get_parent()
@@ -1420,12 +1419,14 @@ except Exception as e:
     pass
 
 
-def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None):
-    return Thread(track_event=track_event, id=id, tags=tags)
+def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_id: str | None = None):
+    config = get_config()
+    token = app_id or config.app_id
+    return Thread(track_event=track_event, id=id, tags=tags, app_id=token)
 
 
-def track_feedback(run_id: str, feedback: Dict[str, Any]):
-    if not run_id or not isinstance(run_id, str):
+def track_feedback(run_id: str, feedback: Dict[str, Any] | Any):
+    if not run_id:
         logger.exception("No message ID provided to track feedback")
         return
 
