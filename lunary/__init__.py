@@ -143,7 +143,6 @@ def track_event(
             "appId": app_id
         }
 
-
         if callback_queue is not None:
             callback_queue.append(event)
         else:
