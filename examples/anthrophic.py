@@ -2,7 +2,8 @@ import os
 import asyncio
 from anthropic import Anthropic, AsyncAnthropic
 
-from lunary.anthrophic import monitor
+import lunary
+from lunary.anthrophic import monitor, parse_message
 
 def sync_non_streaming():
     client = Anthropic()
@@ -228,6 +229,65 @@ async def async_tool_calls():
                 print(f"snapshot: {event.snapshot}")
 
 
+def reconcilliation_tool_calls():
+    from anthropic import Anthropic
+    from anthropic.types import ToolParam, MessageParam
+
+    thread = lunary.open_thread()
+    client = monitor(Anthropic())
+
+    user_message: MessageParam = {
+        "role": "user",
+        "content": "What is the weather in San Francisco, California?",
+    }
+    tools: list[ToolParam] = [
+        {
+            "name": "get_weather",
+            "description": "Get the weather for a specific location",
+            "input_schema": {
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+            },
+        }
+    ]
+
+    message_id = thread.track_message(user_message)
+
+    with lunary.parent(message_id):
+        message = client.messages.create(
+            model="claude-3-opus-20240229",
+            max_tokens=1024,
+            messages=[user_message],
+            tools=tools,
+        )
+        print(f"Initial response: {message.model_dump_json(indent=2)}")
+
+        assert message.stop_reason == "tool_use"
+
+        tool = next(c for c in message.content if c.type == "tool_use")
+        response = client.messages.create(
+            model="claude-3-opus-20240229",
+            max_tokens=1024,
+            messages=[
+                user_message,
+                {"role": message.role, "content": message.content},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool.id,
+                            "content": [{"type": "text", "text": "The weather is 73f"}],
+                        }
+                    ],
+                },
+            ],
+            tools=tools,
+        )
+        print(f"\nFinal response: {response.model_dump_json(indent=2)}")
+
+
+
 # sync_non_streaming()
 # asyncio.run(async_non_streaming())
 
@@ -243,3 +303,5 @@ async def async_tool_calls():
 
 # tool_calls()
 # asyncio.run(async_tool_calls())
+
+reconcilliation_tool_calls()

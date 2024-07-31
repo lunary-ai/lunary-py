@@ -74,7 +74,7 @@ def __params_parser(params: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
     }
 
 
-def __parse_message_content(message: MessageParam):
+def parse_message(message: MessageParam):
     role = message.get("role")
     content = message.get("content")
 
@@ -120,7 +120,7 @@ def __input_parser(kwargs: t.Dict):
                     inputs.append({ "role": "system", "content": item.get("text") })
 
     for message in kwargs.get("messages", []):
-        inputs.extend(__parse_message_content(message))
+        inputs.extend(parse_message(message))
 
     return {"input": inputs, "name": kwargs.get("model")}
 
@@ -176,7 +176,6 @@ class Stream:
 
     def __iterator__(self):
         for event in self.__stream.__stream__():
-            print("\n", event)
             if event.type == "message_start":
                 self.__messages.append(
                     {
@@ -320,7 +319,6 @@ class AsyncStream:
 
     async def __iterator__(self):
         async for event in self.__stream.__stream__():
-            print("\n", event)
             if event.type == "message_start":
                 self.__messages.append(
                     {
@@ -578,7 +576,6 @@ def __wrap_sync(
                     is_openai=False,
                 )
             except Exception as e:
-                raise e
                 return logging.exception(e)
 
             if contextify_stream or kwargs.get("stream") == True:
@@ -672,7 +669,6 @@ async def __wrap_async(
                     is_openai=False,
                 )
             except Exception as e:
-                raise e
                 return logging.exception(e)
 
             if contextify_stream or kwargs.get("stream") == True:
