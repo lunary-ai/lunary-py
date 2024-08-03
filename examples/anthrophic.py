@@ -286,23 +286,7 @@ def reconcilliation_tool_calls():
 
         tool = next(c for c in message.content if c.type == "tool_use")
 
-        for item in (
-            [
-                user_message,
-                {"role": message.role, "content": message.content},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool.id,
-                            "content": [{"type": "text", "text": "The weather is 73f"}],
-                        }
-                    ],
-                },
-            ]
-        ):
-            thread.track_message(item)
+        for item in parse_message(message): thread.track_message(item)
 
         response = client.messages.create(
             model="claude-3-opus-20240229",
