@@ -52,19 +52,35 @@ PARAMS_TO_CAPTURE = [
 ]
 
 
+def __prop(
+    target: t.Union[t.Dict, t.Any],
+    property_or_keys: t.Union[t.List, str],
+    default_value: t.Any = None
+):
+    if isinstance(property_or_keys, list):
+        value = target
+        for key in property_or_keys:
+            value = __prop(value, key)
+            if not value: return default_value
+        return value
+
+    if isinstance(target, dict):
+        return target.get(property_or_keys, default_value)
+    return getattr(target, property_or_keys, default_value)
+
+
 def __parse_tools(tools: list[ToolParam]):
     return [
         {
             "type": "function",
             "function": {
-                "name": tool.get("name"),
-                "description": tool.get("description"),
-                "inputSchema": tool.get("input_schema"),
+                "name": __prop(tool, "name"),
+                "description": __prop(tool, "description"),
+                "inputSchema": __prop(tool, "input_schema"),
             },
         }
         for tool in tools
     ]
-
 
 def __params_parser(params: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
     return {
@@ -75,32 +91,31 @@ def __params_parser(params: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
 
 
 def parse_message(message: MessageParam):
-    role = message.get("role")
-    content = message.get("content")
+    role = __prop(message, "role", "system")
+    content = __prop(message, "content", message)
 
-    # print({"role": role, "content": content})
+    print(role, content)
 
     if isinstance(content, str):
         yield {"role": role, "content": content}
     elif isinstance(content, list):
         for item in content:
-            if isinstance(item, dict):
-                if item.get("type") == "text":
-                    yield {"content": item.get("text"), "role": role}
-                elif item.get("type") == "tool_use":
-                    yield {
-                        "functionCall": {
-                            "name": item.get("name"),
-                            "arguments": item.get("input"),
-                        },
-                        "toolCallId": item.get("id"),
-                    }
-                elif item.get("type") == "tool_result":
-                    yield {
-                        "role": "tool",
-                        "tool_call_id": item.get("tool_use_id"),
-                        "content": item.get("content"),
-                    }
+            if __prop(item, "type") == "text":
+                yield {"content": __prop(item, "text"), "role": role}
+            elif __prop(item, "type") == "tool_use":
+                yield {
+                    "functionCall": {
+                        "name": __prop(item, "name"),
+                        "arguments": __prop(item, "input"),
+                    },
+                    "toolCallId": __prop(item, "id"),
+                }
+            elif __prop(item, "type") == "tool_result":
+                yield {
+                    "role": "tool",
+                    "tool_call_id": __prop(item, "tool_use_id"),
+                    "content": __prop(item, "content"),
+                }
 
     else:
         error = f"Invalid 'content' type for message: {message}"
@@ -113,47 +128,39 @@ def __input_parser(kwargs: t.Dict):
     if kwargs.get("system"):
         system = kwargs.get("system")
         if isinstance(system, str):
-            inputs.append({ "role": "system", "content": kwargs["system"] })
+            inputs.append({"role": "system", "content": kwargs["system"]})
         elif isinstance(system, list):
             for item in kwargs["system"]:
-                if item.get("type") == "text":
-                    inputs.append({ "role": "system", "content": item.get("text") })
+                if __prop(item, "type") == "text":
+                    inputs.append({"role": "system", "content": __prop(item, "text")})
 
     for message in kwargs.get("messages", []):
         inputs.extend(parse_message(message))
 
     return {"input": inputs, "name": kwargs.get("model")}
 
-
-def __output_parser(output: t.Union[Message], stream: bool = False):
-    if isinstance(output, Message):
-        return {
-            "name": output.model,
-            "tokensUsage": {
-                "completion": output.usage.output_tokens,
-                "prompt": output.usage.input_tokens,
-            },
-            "output": [
-                (
-                    {"content": content.text, "role": output.role}
-                    if content.type == "text"
-                    else {
-                        "functionCall": {
-                            "name": content.name,
-                            "arguments": content.input,
-                        },
-                        "toolCallId": content.id,
-                    }
-                )
-                for content in output.content
-            ],
-        }
-    else:
-        return {
-            "name": None,
-            "tokenUsage": None,
-            "output": getattr(output, "content", output),
-        }
+def __output_parser(output: t.Any, stream: bool = False):
+    return {
+        "name": __prop(output, "model"),
+        "tokensUsage": {
+            "completion": __prop(output, ["usage", "output_tokens"]),
+            "prompt": __prop(output, ["usage", "input_tokens"]),
+        },
+        "output": [
+            (
+                {"content": __prop(content, "text"), "role": __prop(output, "role")}
+                if __prop(content, "type") == "text"
+                else {
+                    "functionCall": {
+                        "name": __prop(content, "name"),
+                        "arguments": __prop(content, "input"),
+                    },
+                    "toolCallId": __prop(content, "id"),
+                }
+            )
+            for content in __prop(output, "content", output)
+        ],
+    }
 
 
 class Stream:
@@ -597,6 +604,8 @@ def __wrap_sync(
             try:
                 parsed_output = output_parser(output, kwargs.get("stream", False))
 
+                print(parsed_input, parsed_output, output)
+
                 track_event(
                     type,
                     "end",
@@ -738,3 +747,46 @@ def monitor(client: "ClientType") -> "ClientType":
     else:
         raise Exception("Invalid argument. Expected instance of Anthropic Client")
     return client
+
+
+def agent(name=None, user_id=None, user_props=None, tags=None):
+    def decorator(fn):
+        return partial(
+            __wrap_sync,
+            fn, "agent",
+            name=name or fn.__name__,
+            user_id=user_id,
+            user_props=user_props,
+            tags=tags
+        )
+
+    return decorator
+
+
+def chain(name=None, user_id=None, user_props=None, tags=None):
+    def decorator(fn):
+        return partial(
+            __wrap_sync,
+            fn, "chain",
+            name=name or fn.__name__,
+            user_id=user_id,
+            user_props=user_props,
+            tags=tags
+        )
+
+    return decorator
+
+
+def tool(name=None, user_id=None, user_props=None, tags=None):
+    def decorator(fn):
+        return partial(
+            __wrap_sync,
+            fn, "tool",
+            name=name or fn.__name__,
+            user_id=user_id,
+            user_props=user_props,
+            tags=tags
+        )
+
+    return decorator
+

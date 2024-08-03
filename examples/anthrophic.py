@@ -3,7 +3,8 @@ import asyncio
 from anthropic import Anthropic, AsyncAnthropic
 
 import lunary
-from lunary.anthrophic import monitor, parse_message
+from lunary.anthrophic import monitor, parse_message, agent
+
 
 def sync_non_streaming():
     client = Anthropic()
@@ -11,10 +12,12 @@ def sync_non_streaming():
 
     message = client.messages.create(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
     )
     print(message.content)
@@ -25,10 +28,12 @@ async def async_non_streaming():
 
     message = await client.messages.create(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
     )
     print(message.content)
@@ -39,10 +44,12 @@ def sync_streaming():
 
     stream = client.messages.create(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
         stream=True,
     )
@@ -55,10 +62,12 @@ async def async_streaming():
 
     stream = await client.messages.create(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
         stream=True,
     )
@@ -72,14 +81,17 @@ def sync_stream_helper():
 
     with client.messages.stream(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
     ) as stream:
         for event in stream:
             print(event)
+
 
 async def async_stream_helper():
     client = monitor(AsyncAnthropic())
@@ -108,10 +120,12 @@ def extra_arguments():
 
     message = client.messages.create(
         max_tokens=1024,
-        messages=[{
-            "role": "user",
-            "content": "Hello, Claude",
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": "Hello, Claude",
+            }
+        ],
         model="claude-3-opus-20240229",
         tags=["translate"],
         user_id="user123",
@@ -143,6 +157,7 @@ def anthrophic_bedrock():
         model="anthropic.claude-3-sonnet-20240229-v1:0",
     )
     print(message)
+
 
 def tool_calls():
     from anthropic import Anthropic
@@ -210,7 +225,10 @@ async def async_tool_calls():
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "location": {"type": "string", "description": "The city and state, e.g. San Francisco, CA"},
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA",
+                        },
                         "unit": {
                             "type": "string",
                             "enum": ["celsius", "fahrenheit"],
@@ -229,6 +247,7 @@ async def async_tool_calls():
                 print(f"snapshot: {event.snapshot}")
 
 
+@agent("DemoAgent")
 def reconcilliation_tool_calls():
     from anthropic import Anthropic
     from anthropic.types import ToolParam, MessageParam
@@ -259,15 +278,36 @@ def reconcilliation_tool_calls():
             max_tokens=1024,
             messages=[user_message],
             tools=tools,
+            parent=message_id,
         )
         print(f"Initial response: {message.model_dump_json(indent=2)}")
 
         assert message.stop_reason == "tool_use"
 
         tool = next(c for c in message.content if c.type == "tool_use")
+
+        for item in (
+            [
+                user_message,
+                {"role": message.role, "content": message.content},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool.id,
+                            "content": [{"type": "text", "text": "The weather is 73f"}],
+                        }
+                    ],
+                },
+            ]
+        ):
+            thread.track_message(item)
+
         response = client.messages.create(
             model="claude-3-opus-20240229",
             max_tokens=1024,
+            parent=message_id,
             messages=[
                 user_message,
                 {"role": message.role, "content": message.content},
@@ -286,6 +326,10 @@ def reconcilliation_tool_calls():
         )
         print(f"\nFinal response: {response.model_dump_json(indent=2)}")
 
+        for item in parse_message(response):
+            thread.track_message(item)
+
+    return response
 
 
 # sync_non_streaming()
