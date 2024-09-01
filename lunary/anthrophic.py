@@ -198,7 +198,7 @@ class Stream:
             if event.type == "message_delta":
                 if len(self.__messages) >= 1:
                     message = self.__messages[-1]
-                    message["usage"]["tokens"] = event.usage.output_tokens
+                    message["usage"]["output"] = event.usage.output_tokens
 
             if event.type == "message_stop":
                 # print("\n\n ** ", list(__parse_message_content(event.message)))
@@ -292,7 +292,7 @@ class Stream:
             name=self.__handler.__name__,
             token_usage={
                 "completion": sum(
-                    [message["usage"]["tokens"] for message in self.__messages]
+                    [message["usage"]["output"] for message in self.__messages]
                 ),
                 "prompt": sum(
                     [message["usage"]["input"] for message in self.__messages]
@@ -341,7 +341,7 @@ class AsyncStream:
             if event.type == "message_delta":
                 if len(self.__messages) >= 1:
                     message = self.__messages[-1]
-                    message["usage"]["tokens"] = event.usage.output_tokens
+                    message["usage"]["output"] = event.usage.output_tokens
 
             if event.type == "message_stop":
                 # print("\n\n ** ", list(__parse_message_content(event.message)))
@@ -435,7 +435,7 @@ class AsyncStream:
             name=self.__handler.__name__,
             token_usage={
                 "completion": sum(
-                    [message["usage"]["tokens"] for message in self.__messages]
+                    [message["usage"]["output"] for message in self.__messages]
                 ),
                 "prompt": sum(
                     [message["usage"]["input"] for message in self.__messages]
