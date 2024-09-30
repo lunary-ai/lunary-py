@@ -1151,16 +1151,19 @@ try:
             parent_run_id: Union[UUID, None] = None,
             tags: Union[List[str], None] = None,
             metadata: Union[Dict[str, Any], None] = None,
+            name: Union[str, None] = None,
             **kwargs: Any,
         ) -> Any:
             try:
                 run = run_manager.start_run(run_id, parent_run_id)
 
-                name = (
-                    serialized.get("id", [None, None, None, None])[3]
-                    if len(serialized.get("id", [])) > 3
-                    else None
-                )
+                if name is None and serialized:
+                    name = (
+                        serialized.get("id", [None, None, None, None])[3]
+                        if len(serialized.get("id", [])) > 3
+                        else None
+                    )
+
                 type = "chain"
                 metadata = metadata or {}
 
