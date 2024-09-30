@@ -9,7 +9,7 @@ thread = lunary.open_thread()
 thread.track_message({
   "role": "user",
   "content": "Hello!"
-})
+}, "user123")
 
 time.sleep(0.5)
 
@@ -23,7 +23,7 @@ time.sleep(0.5)
 thread.track_message({
   "role": "user",
   "content": "I have a question about your product."
-})
+}, "user123")
 time.sleep(0.5)
 
 msg_id = thread.track_message({
