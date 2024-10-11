@@ -15,16 +15,14 @@ jobs:
           fetch-depth: 0
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          commit-message: Auto PR from ${{ github.ref_name }}
-          title: "Auto PR: ${{ github.ref_name }} -> main"
-          body: |
-            This is an automated pull request created from the branch ${{ github.ref_name }}.
-
+        run: |
+          gh pr create \
+            -B main \
+            -H ${{ github.ref_name }} \
+            --title "Auto PR: ${{ github.ref_name }} -> main" \
+            --body "This is an automated pull request created from the branch ${{ github.ref_name }}. 
+            
             Changes in this PR:
-            ${{ github.event.head_commit.message }}
-          branch: ${{ github.ref_name }}
-          base: main
-          delete-branch: false
+            ${{ github.event.head_commit.message }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
