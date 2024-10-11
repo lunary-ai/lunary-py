@@ -30,5 +30,6 @@ jobs:
             -B main \
             -H "$BRANCH_NAME" \
             --title "$PR_TITLE"
+            --body ""
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
