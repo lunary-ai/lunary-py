@@ -29,7 +29,7 @@ jobs:
           gh pr create \
             -B main \
             -H "$BRANCH_NAME" \
-            --title "$PR_TITLE"
+            --title "$PR_TITLE" \
             --body ""
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
