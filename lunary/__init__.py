@@ -82,7 +82,6 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
 
     parent_run = run_ctx.get()
     if parent_run and parent_run != run_id:
-        run_ctx.set(None)
         return str(create_uuid_from_string(str(parent_run) + str(app_id)))
 
     parent_from_ctx = get_parent()
@@ -127,10 +126,10 @@ def track_event(
         if not app_id:
             return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
+
         parent_run_id = get_parent_run_id(
             parent_run_id, run_type, app_id=app_id, run_id=run_id
         )
-
         # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use
         run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))
 
@@ -362,7 +361,7 @@ def wrap(
     def sync_wrapper(*args, **kwargs):
         output = None
 
-        parent_run_id = kwargs.pop("parent", None)
+        parent_run_id = kwargs.pop("parent", run_ctx.get()) 
         run = run_manager.start_run(run_id, parent_run_id)
 
         with run_context(run.id):
@@ -939,6 +938,8 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
+                if parent_run_id is None:
+                    parent_run_id = run_ctx.get()
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -995,6 +996,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
+                if parent_run_id is None:
+                    parent_run_id = run_ctx.get()
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -1093,6 +1096,8 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
+                if parent_run_id is None:
+                    parent_run_id = run_ctx.get()
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -1155,6 +1160,8 @@ try:
             **kwargs: Any,
         ) -> Any:
             try:
+                if parent_run_id is None:
+                    parent_run_id = run_ctx.get()
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 if name is None and serialized:
@@ -1336,6 +1343,8 @@ try:
             **kwargs: Any,
         ) -> None:
             try:
+                if parent_run_id is None:
+                    parent_run_id = run_ctx.get()
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(kwargs.get("metadata"))
