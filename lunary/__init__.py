@@ -163,7 +163,11 @@ def track_event(
             queue.append(event)
 
         if config.verbose:
-            event_copy = clean_nones(copy.deepcopy(event))
+            try:
+                event_copy = clean_nones(copy.deepcopy(event))
+            except Exception:
+                event_copy = event
+
             logger.info(
                 f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n"
             )
