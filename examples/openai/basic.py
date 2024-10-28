@@ -1,5 +1,5 @@
 import lunary
-from openai import OpenAI
+from openai import OpenAI, Client
 import os
 
 client = OpenAI(

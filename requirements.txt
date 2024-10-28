@@ -1,0 +1,10 @@
+requests
+setuptools
+tenacity
+packaging
+chevron
+pyhumps
+aiohttp
+jsonpickle
+openai
+langchain
