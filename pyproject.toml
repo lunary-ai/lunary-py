@@ -11,7 +11,7 @@ keywords = ["Lunary", "lunary.ai", "Langchain", "AI", "Analytics", "Monitoring"]
 [tool.poetry.dependencies]
 python = "^3.10.0"
 requests = "^2.31.0"
-setuptools = "^72.1.0"
+setuptools = ">=72.1.0"
 tenacity = "^8.2.3"
 packaging = "^23.2"
 chevron = "^0.14.0"
