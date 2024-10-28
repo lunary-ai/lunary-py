@@ -1,4 +1,4 @@
-import warnings, traceback, logging, copy, time, chevron, hashlib, aiohttp, copy
+import warnings, traceback, logging, copy, time, chevron, aiohttp, copy
 
 from pkg_resources import parse_version
 from importlib.metadata import version, PackageNotFoundError
@@ -163,10 +163,14 @@ def track_event(
             queue.append(event)
 
         if config.verbose:
-            event_copy = clean_nones(copy.deepcopy(event))
-            logger.info(
-                f"\nAdd event: {jsonpickle.encode(event_copy, unpicklable=False, indent=4)}\n"
-            )
+            try:
+                serialized_event = jsonpickle.encode(clean_nones(event), unpicklable=False, indent=4)
+                logger.info(
+                    f"\nAdd event: {serialized_event}\n"
+                )
+            except Exception as e:
+                logger.warning(f"Could not serialize event: {event}\n {e}")
+
 
     except Exception as e:
         logger.exception("Error in `track_event`", e)
