@@ -1,6 +1,6 @@
 import warnings, traceback, logging, copy, time, chevron, aiohttp, copy
 
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -1503,11 +1503,13 @@ def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None =
     Raises:
         TemplateError: If fetching the template fails.
     """
-    
     try:
         config = get_config()
         token = app_id or config.app_id
-        api_url = api_url or config.api_url
+        base_url = api_url or config.api_url
+
+        if not token:
+            raise TemplateError("No authentication token provided")
 
         global templateCache
         now = time.time() * 1000
@@ -1518,10 +1520,13 @@ def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None =
 
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         response = requests.get(
-            f"{api_url}/v1/template_versions/latest?slug={slug}",
+            f"{base_url}/v1/template_versions/latest?slug={slug}",
             headers=headers,
             verify=config.ssl_verify,
         )
+        
+        if response.status_code == 401:
+            raise TemplateError("Invalid or unauthorized API credentials")
         
         if not response.ok:
             raise TemplateError(f"Error fetching template: {response.status_code} - {response.text}")
@@ -1529,8 +1534,9 @@ def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None =
         data = response.json()
         templateCache[slug] = {"timestamp": now, "data": data}
         return data
-    except TemplateError:
-        raise
+        
+    except requests.exceptions.RequestException as e:
+        raise TemplateError(f"Network error while fetching template: {str(e)}")
     except Exception as e:
         raise TemplateError(f"Error fetching template: {str(e)}")
 
