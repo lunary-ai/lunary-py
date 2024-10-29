@@ -6,7 +6,9 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Optional
 import jsonpickle
+import humps
 
+from .exceptions import *
 from .parsers import default_input_parser, default_output_parser, filter_params
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
@@ -1434,278 +1436,348 @@ except Exception as e:
     # Do not raise or print error for users that do not have Langchain installed
     pass
 
-
 def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_id: str | None = None):
-    config = get_config()
-    token = app_id or config.app_id
-    return Thread(track_event=track_event, id=id, tags=tags, app_id=token)
+    """
+    Opens a new thread or connects to an existing one.
 
+    Args:
+        id: Optional thread identifier
+        tags: Optional list of tags for the thread
+        app_id: Optional app ID override
+
+    Returns:
+        Thread object
+
+    Raises:
+        ThreadError: If there's any error creating or connecting to the thread
+    """
+    try:
+        config = get_config()
+        token = app_id or config.app_id
+        if not token:
+            raise ThreadError("API token is required")
+
+        return Thread(track_event=track_event, id=id, tags=tags, app_id=token)
+    except Exception as e:
+        raise ThreadError(f"Error opening thread: {str(e)}")
 
 def track_feedback(run_id: str, feedback: Dict[str, Any] | Any):
-    if not run_id:
-        logger.exception("No message ID provided to track feedback")
-        return
+    """
+    Tracks feedback for a specific run.
 
-    if not isinstance(feedback, dict):
-        logger.exception("Invalid feedback provided. Pass a valid object")
-        return
+    Args:
+        run_id: The ID of the run to track feedback for
+        feedback: Feedback data, must be a dictionary
 
-    track_event(None, "feedback", run_id=run_id, feedback=feedback)
+    Raises:
+        FeedbackError: If there's any error with the feedback data or tracking
+    """
+    try:
+        if not run_id:
+            raise FeedbackError("No message ID provided to track feedback")
+
+        if not isinstance(feedback, dict):
+            raise FeedbackError("Invalid feedback provided. Pass a valid dictionary")
+
+        track_event(None, "feedback", run_id=run_id, feedback=feedback)
+    except Exception as e:
+        raise FeedbackError(f"Error tracking feedback: {str(e)}")
 
 
 templateCache = {}
-
-
 def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None = None):
-    config = get_config()
-    token = app_id or config.app_id
-    api_url = api_url or config.api_url
+    """
+    Fetches the latest version of a template based on a given slug.
+    If a cached version is available and recent (less than 60 seconds old), 
+    it will return the cached data. Otherwise, it makes an HTTP GET request
+    to fetch the template from the specified or default API.
 
-    global templateCache
-    now = time.time() * 1000
-    cache_entry = templateCache.get(slug)
+    Parameters:
+        slug (str): Unique identifier for the template.
+        app_id (str, optional): Application ID for authentication. Defaults to config's app ID.
+        api_url (str, optional): API base URL. Defaults to config's API URL.
 
-    if cache_entry and now - cache_entry["timestamp"] < 60000:
-        return cache_entry["data"]
+    Returns:
+        dict: JSON response containing template data.
+    
+    Raises:
+        TemplateError: If fetching the template fails.
+    """
+    
+    try:
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        global templateCache
+        now = time.time() * 1000
+        cache_entry = templateCache.get(slug)
 
-    response = requests.get(
-        f"{api_url}/v1/template_versions/latest?slug={slug}",
-        headers=headers,
-        verify=config.ssl_verify,
-    )
-    if not response.ok:
-        logger.exception(
-            f"Error fetching template: {response.status_code} - {response.text}"
+        if cache_entry and now - cache_entry["timestamp"] < 60000:
+            return cache_entry["data"]
+
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        response = requests.get(
+            f"{api_url}/v1/template_versions/latest?slug={slug}",
+            headers=headers,
+            verify=config.ssl_verify,
         )
+        
+        if not response.ok:
+            raise TemplateError(f"Error fetching template: {response.status_code} - {response.text}")
 
-    data = response.json()
-    templateCache[slug] = {"timestamp": now, "data": data}
-    return data
+        data = response.json()
+        templateCache[slug] = {"timestamp": now, "data": data}
+        return data
+    except TemplateError:
+        raise
+    except Exception as e:
+        raise TemplateError(f"Error fetching template: {str(e)}")
 
+async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: str | None = None):
+    """
+    Asynchronously fetches the latest version of a template based on a given slug.
+    Similar to `get_raw_template`, but uses asynchronous requests.
 
-async def get_raw_template_async(
-    slug: str, app_id: str | None = None, api_url: str | None = None
-):
-    config = get_config()
-    token = app_id or config.app_id
-    api_url = api_url or config.api_url
+    Parameters:
+        slug (str): Unique identifier for the template.
+        app_id (str, optional): Application ID for authentication. Defaults to config's app ID.
+        api_url (str, optional): API base URL. Defaults to config's API URL.
 
-    global templateCache
-    now = time.time() * 1000
-    cache_entry = templateCache.get(slug)
+    Returns:
+        dict: JSON response containing template data.
+    
+    Raises:
+        TemplateError: If fetching the template fails.
+    """
+    try:
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url
 
-    if cache_entry and now - cache_entry["timestamp"] < 60000:
-        return cache_entry["data"]
+        global templateCache
+        now = time.time() * 1000
+        cache_entry = templateCache.get(slug)
 
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        if cache_entry and now - cache_entry["timestamp"] < 60000:
+            return cache_entry["data"]
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            f"{api_url}/v1/template_versions/latest?slug={slug}", headers=headers
-        ) as response:
-            if not response.ok:
-                raise Exception(
-                    f"Lunary: Error fetching template: {response.status} - {await response.text()}"
-                )
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-            data = await response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{api_url}/v1/template_versions/latest?slug={slug}",
+                headers=headers
+            ) as response:
+                if not response.ok:
+                    raise TemplateError(
+                        f"Error fetching template: {response.status} - {await response.text()}"
+                    )
 
-    templateCache[slug] = {"timestamp": now, "data": data}
-    return data
+                data = await response.json()
+                templateCache[slug] = {"timestamp": now, "data": data}
+                return data
 
+    except TemplateError:
+        raise
+    except Exception as e:
+        raise TemplateError(f"Error fetching template: {str(e)}")
 
-def render_template(
-    slug: str, data={}, app_id: str | None = None, api_url: str | None = None
-):
+def render_template(slug: str, data={}, app_id: str | None = None, api_url: str | None = None):
+    """
+    Renders a template by populating it with the provided data.
+    Retrieves the raw template, then uses `chevron.render` to substitute variables.
+
+    Parameters:
+        slug (str): Template identifier.
+        data (dict): Data for template rendering.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        dict: Rendered template with headers and extra metadata.
+
+    Raises:
+        TemplateError: If rendering fails.
+    """
     try:
         raw_template = get_raw_template(slug, app_id, api_url)
 
-        if (
-            raw_template.get("message")
-            == "Template not found, is the project ID correct?"
-        ):
-            raise Exception("Template not found, are the project ID and slug correct?")
+        if raw_template.get("message") == "Template not found, is the project ID correct?":
+            raise TemplateError("Template not found, are the project ID and slug correct?")
 
         template_id = copy.deepcopy(raw_template["id"])
         content = copy.deepcopy(raw_template["content"])
         extra = copy.deepcopy(raw_template["extra"])
-
         text_mode = isinstance(content, str)
-
-        # extra_headers is safe with OpenAI to be used to pass value
         extra_headers = {"Template-Id": str(template_id)}
 
-        result = None
         if text_mode:
             rendered = chevron.render(content, data)
-            result = {"text": rendered, "extra_headers": extra_headers, **extra}
-            return result
+            return {"text": rendered, "extra_headers": extra_headers, **extra}
         else:
             messages = []
             for message in content:
                 message["content"] = chevron.render(message["content"], data)
                 messages.append(message)
-            result = {"messages": messages, "extra_headers": extra_headers, **extra}
+            return {"messages": messages, "extra_headers": extra_headers, **extra}
 
-            return result
     except Exception as e:
-        logging.exception(f"Error rendering template {e}")
+        raise TemplateError(f"Error rendering template: {str(e)}")
 
+async def render_template_async(slug: str, data={}, app_id: str | None = None, api_url: str | None = None):
+    """
+    Asynchronous version of `render_template`, which fetches and renders a template
+    using asynchronous requests.
 
-async def render_template_async(
-    slug: str, data={}, app_id: str | None = None, api_url: str | None = None
-):
+    Parameters:
+        slug (str): Template identifier.
+        data (dict): Data for template rendering.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        dict: Rendered template with headers and extra metadata.
+
+    Raises:
+        TemplateError: If rendering fails.
+    """
     try:
         raw_template = await get_raw_template_async(slug, app_id, api_url)
 
-        if (
-            raw_template.get("message")
-            == "Template not found, is the project ID correct?"
-        ):
-            raise Exception("Template not found, are the project ID and slug correct?")
+        if raw_template.get("message") == "Template not found, is the project ID correct?":
+            raise TemplateError("Template not found, are the project ID and slug correct?")
 
         template_id = copy.deepcopy(raw_template["id"])
         content = copy.deepcopy(raw_template["content"])
         extra = copy.deepcopy(raw_template["extra"])
-
         text_mode = isinstance(content, str)
-
-        # extra_headers is safe with OpenAI to be used to pass value
         extra_headers = {"Template-Id": str(template_id)}
 
-        result = None
         if text_mode:
             rendered = chevron.render(content, data)
-            result = {"text": rendered, "extra_headers": extra_headers, **extra}
-            return result
+            return {"text": rendered, "extra_headers": extra_headers, **extra}
         else:
             messages = []
             for message in content:
                 message["content"] = chevron.render(message["content"], data)
                 messages.append(message)
-            result = {"messages": messages, "extra_headers": extra_headers, **extra}
+            return {"messages": messages, "extra_headers": extra_headers, **extra}
 
-            return result
     except Exception as e:
-        logging.exception(f"Error rendering template {e}")
+        raise TemplateError(f"Error rendering template: {str(e)}")
 
+def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | None = None):
+    """
+    Creates a LangChain prompt template from a raw template, converting any double braces.
 
-def get_langchain_template(
-    slug: str, app_id: str | None = None, api_url: str | None = None
-):
+    Parameters:
+        slug (str): Template identifier.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        PromptTemplate or ChatPromptTemplate: Processed LangChain template.
+
+    Raises:
+        TemplateError: If creating the LangChain template fails.
+    """
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-
+        
         raw_template = get_raw_template(slug, app_id, api_url)
 
-        if (
-            raw_template.get("message")
-            == "Template not found, is the project ID correct?"
-        ):
-            raise Exception("Template not found, are the project ID and slug correct?")
+        if raw_template.get("message") == "Template not found, is the project ID correct?":
+            raise TemplateError("Template not found, are the project ID and slug correct?")
 
         content = copy.deepcopy(raw_template["content"])
+        text_mode = isinstance(content, str)
 
         def replace_double_braces(text):
             return text.replace("{{", "{").replace("}}", "}")
 
-        text_mode = isinstance(content, str)
-
         if text_mode:
-            # replace {{ variables }} with { variables }
             rendered = replace_double_braces(content)
-            template = PromptTemplate.from_template(rendered)
-            return template
-
+            return PromptTemplate.from_template(rendered)
         else:
             messages = []
-
-            # Return array of messages:
-            #  [
-            #     ("system", "You are a helpful AI bot. Your name is {name}."),
-            #     ("human", "Hello, how are you doing?"),
-            #     ("ai", "I'm doing well, thanks!"),
-            #     ("human", "{user_input}"),
-            # ]
             for message in content:
                 messages.append(
                     (
-                        message["role"]
-                        .replace("assistant", "ai")
-                        .replace("user", "human"),
+                        message["role"].replace("assistant", "ai").replace("user", "human"),
                         replace_double_braces(message["content"]),
                     )
                 )
+            return ChatPromptTemplate.from_messages(messages)
 
-            template = ChatPromptTemplate.from_messages(messages)
-
-            return template
-
+    except ImportError:
+        raise TemplateError("LangChain is required. Install it with: pip install langchain-core")
     except Exception as e:
-        logger.exception(f"Error fetching template: {e}")
+        raise TemplateError(f"Error creating LangChain template: {str(e)}")
 
+async def get_langchain_template_async(slug: str, app_id: str | None = None, api_url: str | None = None):
+    """
+    Asynchronous version of `get_langchain_template`, which creates a LangChain prompt
+    template using asynchronous requests.
 
-async def get_langchain_template_async(
-    slug, app_id: str | None = None, api_url: str | None = None
-):
+    Parameters:
+        slug (str): Template identifier.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        PromptTemplate or ChatPromptTemplate: Processed LangChain template.
+
+    Raises:
+        TemplateError: If creating the LangChain template fails.
+    """
     try:
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-
+        
         raw_template = await get_raw_template_async(slug, app_id, api_url)
 
-        if (
-            raw_template.get("message")
-            == "Template not found, is the project ID correct?"
-        ):
-            raise Exception("Template not found, are the project ID and slug correct?")
+        if raw_template.get("message") == "Template not found, is the project ID correct?":
+            raise TemplateError("Template not found, are the project ID and slug correct?")
 
         content = copy.deepcopy(raw_template["content"])
+        text_mode = isinstance(content, str)
 
         def replace_double_braces(text):
             return text.replace("{{", "{").replace("}}", "}")
 
-        text_mode = isinstance(content, str)
-
         if text_mode:
-            # replace {{ variables }} with { variables }
             rendered = replace_double_braces(content)
-
-            template = PromptTemplate.from_template(rendered)
-
-            return template
-
+            return PromptTemplate.from_template(rendered)
         else:
             messages = []
-
-            # Return array of messages like that:
-            #  [
-            #     ("system", "You are a helpful AI bot. Your name is {name}."),
-            #     ("human", "Hello, how are you doing?"),
-            #     ("ai", "I'm doing well, thanks!"),
-            #     ("human", "{user_input}"),
-            # ]
-
             for message in content:
                 messages.append(
                     (
-                        message["role"]
-                        .replace("assistant", "ai")
-                        .replace("user", "human"),
+                        message["role"].replace("assistant", "ai").replace("user", "human"),
                         replace_double_braces(message["content"]),
                     )
                 )
+            return ChatPromptTemplate.from_messages(messages)
 
-            template = ChatPromptTemplate.from_messages(messages)
-
-            return template
-
+    except ImportError:
+        raise TemplateError("LangChain is required. Install it with: pip install langchain-core")
     except Exception as e:
-        logger.exception(f"Error fetching template: {e}")
-
+        raise TemplateError(f"Error creating LangChain template: {str(e)}")
 
 def get_live_templates(app_id: str | None = None, api_url: str | None = None):
+    """
+    Fetches a list of the latest live templates available.
+
+    Parameters:
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        list: JSON list of live templates.
+
+    Raises:
+        TemplateError: If fetching templates fails.
+    """
     try:
         config = get_config()
         token = app_id or config.app_id
@@ -1721,52 +1793,58 @@ def get_live_templates(app_id: str | None = None, api_url: str | None = None):
             headers=headers,
             verify=config.ssl_verify,
         )
+        
         if not response.ok:
-            logger.exception(
-                f"Error fetching template: {response.status_code} - {response.text}"
-            )
+            raise TemplateError(f"Error fetching templates: {response.status_code} - {response.text}")
 
-        templates = response.json()
-        return templates
+        return response.json()
     except Exception as e:
-        raise LunaryException(f"An error occurred fetching templates: {str(e)}") from e
-
-
-import humps
-
-
+        raise TemplateError(f"Error fetching templates: {str(e)}")
+    
 class DatasetItem:
     def __init__(self, d=None):
         if d is not None:
             for key, value in d.items():
                 setattr(self, key, value)
 
-
 def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None):
-    config = get_config()
-    token = app_id or config.app_id
-    api_url = api_url or config.api_url
+    """
+    Fetches a dataset based on the given slug, parsing and returning it as a list of
+    DatasetItem objects.
 
+    Parameters:
+        slug (str): Dataset identifier.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        list[DatasetItem]: List of dataset items.
+
+    Raises:
+        DatasetError: If fetching the dataset fails.
+    """
     try:
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url
+
         url = f"{api_url}/v1/datasets/{slug}"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        
         response = requests.get(url, headers=headers, verify=config.ssl_verify)
-        if response.ok:
-            dataset = response.json()
-            dataset = humps.decamelize(dataset)
-            items_data = dataset.get("items", [])
-            items = [DatasetItem(d=item) for item in items_data]
+        if not response.ok:
+            raise DatasetError(f"Error fetching dataset: {response.status_code}")
 
-            return items
-        else:
-            raise Exception(f"Status code: {response.status_code}")
+        dataset = response.json()
+        dataset = humps.decamelize(dataset)
+        items_data = dataset.get("items", [])
+        return [DatasetItem(d=item) for item in items_data]
 
     except Exception as e:
-        logger.exception(f"Error fetching dataset {e}")
-
+        raise DatasetError(f"Error fetching dataset: {str(e)}")
 
 def evaluate(
     checklist,
@@ -1780,43 +1858,81 @@ def evaluate(
     app_id: str | None = None,
     api_url: str | None = None,
 ):
-    config = get_config()
-    token = app_id or config.app_id
-    api_url = api_url or config.api_url
+    """
+    Submits an evaluation run based on provided input, output, and other optional parameters.
 
+    Parameters:
+        checklist (list): Evaluation criteria checklist.
+        input (Any): Input data for the evaluation.
+        output (Any): Output to evaluate.
+        ideal_output (Any, optional): Expected ideal output.
+        context (Any, optional): Additional evaluation context.
+        model (Any, optional): Model used for the evaluation.
+        duration (float, optional): Evaluation duration.
+        tags (list, optional): Evaluation tags.
+        app_id (str, optional): Application ID for authentication.
+        api_url (str, optional): API base URL.
+
+    Returns:
+        tuple: (passed, results) evaluation status and details.
+
+    Raises:
+        EvaluationError: If evaluation fails.
+    """
     try:
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url
+
         url = f"{api_url}/v1/evaluations/run"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
-        data = {"checklist": checklist, "input": input, "output": output}
-        if ideal_output is not None:
-            data["idealOutput"] = ideal_output
-        if context is not None:
-            data["context"] = context
-        if model is not None:
-            data["model"] = model
-        if duration is not None:
-            data["duration"] = duration
-        if tags is not None:
-            data["tags"] = tags
+        
+        data = {
+            "checklist": checklist,
+            "input": input,
+            "output": output,
+            **({"idealOutput": ideal_output} if ideal_output else {}),
+            **({"context": context} if context else {}),
+            **({"model": model} if model else {}),
+            **({"duration": duration} if duration else {}),
+            **({"tags": tags} if tags else {})
+        }
 
-        response = requests.post(
-            url, headers=headers, json=data, verify=config.ssl_verify
-        )
+        response = requests.post(url, headers=headers, json=data, verify=config.ssl_verify)
+        
         if response.status_code == 500:
-            error_message = response.json().get("message")
-            raise Exception(f"Evaluation error: {error_message}")
+            error_message = response.json().get("message", "Unknown error")
+            raise EvaluationError(f"Evaluation failed: {error_message}")
+        elif not response.ok:
+            raise EvaluationError(f"Error running evaluation: {response.status_code} - {response.text}")
 
         data = humps.decamelize(response.json())
-        passed = data["passed"]
-        results = data["results"]
-
-        return passed, results
+        return data["passed"], data["results"]
 
     except Exception as e:
-        logger.exception(
-            "Error evaluating result. Please contact support@lunary.ai if the problem persists."
-        )
-        raise e
+        raise EvaluationError(f"Error evaluating result: {str(e)}")
+
+def track_feedback(run_id: str, feedback: Dict[str, Any] | Any):
+    """
+    Tracks feedback for a given run ID, validating the provided feedback.
+
+    Parameters:
+        run_id (str): Unique run identifier.
+        feedback (dict): Feedback data.
+
+    Raises:
+        LunaryError: If tracking feedback fails.
+    """
+    try:
+        if not run_id:
+            raise LunaryError("No message ID provided to track feedback")
+
+        if not isinstance(feedback, dict):
+            raise LunaryError("Invalid feedback provided. Pass a valid object")
+
+        track_event(None, "feedback", run_id=run_id, feedback=feedback)
+    except Exception as e:
+        raise LunaryError(f"Error tracking feedback: {str(e)}")
