@@ -21,3 +21,7 @@ class ThreadError(LunaryError):
 class FeedbackError(LunaryError):
     """Raised when there's any error with feedback operations"""
     pass
+
+class ScoringError(LunaryError):
+    """Raised when there's any error with scoring operations"""
+    pass

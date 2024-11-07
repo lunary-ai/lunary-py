@@ -118,7 +118,6 @@ def track_event(
     app_id=None,
     api_url=None,
     callback_queue=None,
-    is_openai=False,
 ):
     try:
         config = get_config()
@@ -1853,6 +1852,48 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
 
     except Exception as e:
         raise DatasetError(f"Error fetching dataset: {str(e)}")
+    
+def score(run_id: str, label: str, value: int | float | str | bool, comment: str | None, app_id: str | None = None, api_url: str | None = None):
+    """
+    Scores a run based on the provided label, value, and optional comment.
+
+    Parameters:
+        run_id (str): Unique run identifier.
+        label (str): Evaluation label.
+        value (int | float | str | bool): Evaluation value.
+        comment (str, optional): Evaluation comment.
+
+    Raises:
+        ScoringError: If scoring fails.
+    """
+    try:
+        config = get_config()
+        token = app_id or config.app_id
+        api_url = api_url or config.api_url
+
+        url = f"{api_url}/v1/runs/{run_id}/score"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+        data = {
+            "label": label,
+            "value": value,
+            **({"comment": comment} if comment else {}),
+        }
+
+        response = requests.patch(url, headers=headers, json=data, verify=config.ssl_verify)
+        
+        if response.status_code == 500:
+            error_message = response.json().get("message", "Unknown error")
+            raise ScoringError(f"Scoring failed: {error_message}")
+        elif not response.ok:
+            raise ScoringError(f"Error scoring run: {response.status_code} - {response.text}")
+
+    except Exception as e:
+        raise EvaluationError(f"Error scoring run: {str(e)}")
+
 
 def evaluate(
     checklist,
@@ -1923,6 +1964,8 @@ def evaluate(
     except Exception as e:
         raise EvaluationError(f"Error evaluating result: {str(e)}")
 
+
+# TODO: use the endpoint, not track_event
 def track_feedback(run_id: str, feedback: Dict[str, Any] | Any):
     """
     Tracks feedback for a given run ID, validating the provided feedback.
