@@ -59,7 +59,6 @@ class Thread:
         - metadata (dict): A dictionary of metadata associated with the event.
         """
 
-        #TODO: remove event like start and end
         self._track_event(
             "thread",
             "custom-event",

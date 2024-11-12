@@ -394,8 +394,7 @@ def wrap(
                         tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
                         template_id=kwargs.get("extra_headers", {}).get(
                             "Template-Id", None
-                        ),
-                        is_openai=True,
+                        )
                     )
                 except Exception as e:
                     logging.exception(e)
