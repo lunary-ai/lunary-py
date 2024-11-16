@@ -115,24 +115,22 @@ def track_event(
     metadata=None,
     params=None,
     runtime=None,
-    app_id=None,
+    app_id=None, # should only be used by Langchain
     api_url=None,
     callback_queue=None,
 ):
     try:
         config = get_config()
-        app_id = app_id or config.app_id
+        langchain_app_id = app_id
+        project_id = app_id or config.app_id # used to generate a unique run_id 
         api_url = api_url or config.api_url
-
-        if not app_id:
-            return warnings.warn("LUNARY_PUBLIC_KEY is not set, not sending events")
 
 
         parent_run_id = get_parent_run_id(
-            parent_run_id, run_type, app_id=app_id, run_id=run_id
+            parent_run_id, run_type, app_id=project_id, run_id=run_id
         )
         # We need to generate a UUID that is unique by run_id / project_id pair in case of multiple concurrent callback handler use
-        run_id = str(create_uuid_from_string(str(run_id) + str(app_id)))
+        run_id = str(create_uuid_from_string(str(run_id) + str(project_id)))
 
         event = {
             "event": event_name,
@@ -155,7 +153,7 @@ def track_event(
             "metadata": metadata,
             "params": params,
             "templateId": template_id,
-            "appId": app_id,
+            "appId": langchain_app_id,
         }
 
         if callback_queue is not None:
@@ -1452,12 +1450,16 @@ def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_
         ThreadError: If there's any error creating or connecting to the thread
     """
     try:
+        if app_id:
+            logger.warning("The `app_id` parameter is deprecated. Please use the `lunary.config` object to set the app ID.")
+
         config = get_config()
-        token = app_id or config.app_id
+        token = config.app_id
+
         if not token:
             raise ThreadError("API token is required")
 
-        return Thread(track_event=track_event, id=id, tags=tags, app_id=token)
+        return Thread(track_event=track_event, id=id, tags=tags)
     except Exception as e:
         raise ThreadError(f"Error opening thread: {str(e)}")
 
@@ -1504,6 +1506,12 @@ def get_raw_template(slug: str, app_id: str | None = None, api_url: str | None =
         TemplateError: If fetching the template fails.
     """
     try:
+        if app_id:
+            logger.warning("The `app_id` parameter is deprecated. Please use the `lunary.config` object to set the app ID.")
+
+        if api_url:
+            logger.warning("The `api_url` parameter is deprecated. Please use the `lunary.config` object to set the API URL.")
+            
         config = get_config()
         token = app_id or config.app_id
         base_url = api_url or config.api_url
@@ -1557,9 +1565,17 @@ async def get_raw_template_async(slug: str, app_id: str | None = None, api_url: 
         TemplateError: If fetching the template fails.
     """
     try:
+        if app_id:
+            logger.warning("The `app_id` parameter is deprecated. Please use the `lunary.config` object to set the app ID.")
+
+        if api_url:
+            logger.warning("The `api_url` parameter is deprecated. Please use the `lunary.config` object to set the API URL.")
+
         config = get_config()
         token = app_id or config.app_id
         api_url = api_url or config.api_url
+
+
 
         global templateCache
         now = time.time() * 1000
@@ -1606,7 +1622,13 @@ def render_template(slug: str, data={}, app_id: str | None = None, api_url: str 
     Raises:
         TemplateError: If rendering fails.
     """
-    try:
+    try: 
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         raw_template = get_raw_template(slug, app_id, api_url)
 
         if raw_template.get("message") == "Template not found, is the project ID correct?":
@@ -1649,6 +1671,12 @@ async def render_template_async(slug: str, data={}, app_id: str | None = None, a
         TemplateError: If rendering fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         raw_template = await get_raw_template_async(slug, app_id, api_url)
 
         if raw_template.get("message") == "Template not found, is the project ID correct?":
@@ -1689,6 +1717,12 @@ def get_langchain_template(slug: str, app_id: str | None = None, api_url: str | 
         TemplateError: If creating the LangChain template fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
         
         raw_template = get_raw_template(slug, app_id, api_url)
@@ -1738,6 +1772,12 @@ async def get_langchain_template_async(slug: str, app_id: str | None = None, api
         TemplateError: If creating the LangChain template fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
         
         raw_template = await get_raw_template_async(slug, app_id, api_url)
@@ -1785,6 +1825,12 @@ def get_live_templates(app_id: str | None = None, api_url: str | None = None):
         TemplateError: If fetching templates fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         config = get_config()
         token = app_id or config.app_id
         api_url = api_url or config.api_url
@@ -1830,6 +1876,13 @@ def get_dataset(slug: str, app_id: str | None = None, api_url: str | None = None
         DatasetError: If fetching the dataset fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
+
         config = get_config()
         token = app_id or config.app_id
         api_url = api_url or config.api_url
@@ -1866,6 +1919,12 @@ def score(run_id: str, label: str, value: int | float | str | bool, comment: str
         ScoringError: If scoring fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         config = get_config()
         token = app_id or config.app_id
         api_url = api_url or config.api_url
@@ -1928,6 +1987,12 @@ def evaluate(
         EvaluationError: If evaluation fails.
     """
     try:
+        if app_id:
+            logger.warning("the `app_id` parameter is deprecated. please use the `lunary.config` object to set the app id.")
+
+        if api_url:
+            logger.warning("the `api_url` parameter is deprecated. please use the `lunary.config` object to set the api url.")
+
         config = get_config()
         token = app_id or config.app_id
         api_url = api_url or config.api_url

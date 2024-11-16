@@ -35,6 +35,9 @@ class Consumer(Thread):
 
         if len(batch) > 0:
             token = batch[0].get("appId") or self.app_id or config.app_id
+            if not token:
+                return logger.error("API key not found. Please provide an API key.")
+
             if verbose:
                 logging.info(f"Sending {len(batch)} events.")
 
