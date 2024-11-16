@@ -1,6 +1,5 @@
 import uuid
 from typing import List, TypedDict
-from .config import get_config
 
 
 class Message(TypedDict, total=False):
@@ -18,17 +17,13 @@ class Thread:
         user_id: str | None = None,
         user_props: dict | None = None,
         id: str | None = None,
-        tags: List[str] | None = None,
-        app_id: str | None = None,
-        api_url: str | None = None,
+        tags: List[str] | None = None
     ):
         self.id = id or str(uuid.uuid4())
         self.user_id = user_id
         self.user_props = user_props
         self.tags = tags
         self._track_event = track_event
-        self.app_id = app_id
-        self.api_url = api_url
 
     def track_message(
         self, message: Message, user_id=None, user_props=None, feedback=None
@@ -44,8 +39,7 @@ class Thread:
             parent_run_id=self.id,
             thread_tags=self.tags,
             feedback=feedback,
-            message=message,
-            app_id=self.app_id,
+            message=message
         )
         return run_id
 
@@ -68,5 +62,4 @@ class Thread:
             user_props=user_props or self.user_props,
             parent_run_id=self.id,
             thread_tags=self.tags,
-            app_id=self.app_id
         )
