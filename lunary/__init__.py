@@ -1,5 +1,5 @@
 from inspect import signature
-import warnings, traceback, logging, copy, time, chevron, aiohttp, copy
+import traceback, logging, copy, time, chevron, aiohttp, copy
 from functools import wraps
 
 
@@ -9,10 +9,11 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Optional, Any, Callable, Union
 import jsonpickle
+from pydantic import BaseModel
 import humps
 
 from .exceptions import *
-from .parsers import default_input_parser, default_output_parser, filter_params, method_input_parser
+from .parsers import default_input_parser, default_output_parser, filter_params, method_input_parser, PydanticHandler
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .thread import Thread
@@ -45,6 +46,7 @@ from contextvars import ContextVar
 class LunaryException(Exception):
     pass
 
+jsonpickle.handlers.register(BaseModel, PydanticHandler, base=True)
 
 def get_parent():
     parent = parent_ctx.get()
@@ -662,7 +664,7 @@ def chain(
                 
                 parsed_input = {"input": input_value}
             else:
-                raw_input = default_input_parser(args, kwargs)
+                raw_input = default_input_parser(*args, **kwargs)
                 parsed_input = {"input": raw_input}
             
             return wrap(
@@ -726,6 +728,7 @@ def class_chain(
             )(self, *args, **kwargs)
         return wrapper
     return decorator
+
 def tool(name=None, user_id=None, user_props=None, tags=None, app_id=None):
     def decorator(fn):
         return wrap(

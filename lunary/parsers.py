@@ -1,4 +1,8 @@
 from typing import Any, Dict
+import jsonpickle
+from pydantic import BaseModel, Field
+
+
 
 def default_input_parser(*args, **kwargs):
     def serialize(args, kwargs):
@@ -38,6 +42,10 @@ def method_input_parser(*args, **kwargs):
 def default_output_parser(output, *args, **kwargs):
     return {"output": getattr(output, "content", output), "tokensUsage": None}
 
+class PydanticHandler(jsonpickle.handlers.BaseHandler):
+    def flatten(self, obj, data):
+        """Convert Pydantic model to a JSON-friendly dict using model_dump_json()"""
+        return jsonpickle.loads(obj.model_dump_json())
 
 PARAMS_TO_CAPTURE = [
   "frequency_penalty",
