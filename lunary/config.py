@@ -35,9 +35,9 @@ config = Config()
 def get_config() -> Config:
     return config
 
-def set_config(app_id: str | None = None, verbose: bool | None = None, api_url: str | None = None, disable_ssl_verify: bool | None = None) -> None:
+def set_config(app_id: str | None = None, verbose: bool | None = None, api_url: str | None = None, disable_ssl_verify: bool = False) -> None:
     config.app_id = app_id or config.app_id
     config.verbose = verbose if verbose is not None else config.verbose
     config.api_url = api_url or config.api_url
-    config.ssl_verify = not (disable_ssl_verify if disable_ssl_verify is not None else config.ssl_verify)
+    config.ssl_verify = not disable_ssl_verify
 

@@ -16,6 +16,24 @@ def default_input_parser(*args, **kwargs):
 
     return {"input": serialize(args, kwargs)}
 
+def method_input_parser(*args, **kwargs):
+    def serialize(args, kwargs):
+        args = args[1:]
+
+        if not args and not kwargs:
+            return None
+
+        if len(args) == 1 and not kwargs:
+            return args[0]
+
+        input_list = list(args)
+        if kwargs:
+            input_list.append(kwargs)
+
+        return input_list
+
+    return {"input": serialize(args, kwargs)}
+
 
 def default_output_parser(output, *args, **kwargs):
     return {"output": getattr(output, "content", output), "tokensUsage": None}
