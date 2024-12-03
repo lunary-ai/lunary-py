@@ -1,24 +1,31 @@
 import json, logging
 
 logger = logging.getLogger(__name__)
-
 MONITORED_KEYS = [
     "frequency_penalty",
-    "function_call",
     "functions",
     "logit_bias",
     "max_tokens",
+    "max_completion_tokens",
     "n",
-    "present_penalty",
+    "presence_penalty",
     "response_format",
     "seed",
     "stop",
     "stream",
+    "audio",
+    "modalities",
     "temperature",
     "tool_choice",
     "tools",
     "tool_calls",
     "top_p",
+    "top_k",
+    "top_logprobs",
+    "logprobs",
+    "prediction",
+    "service_tier",
+    "parallel_tool_calls"
 ]
 
 
@@ -51,6 +58,8 @@ class OpenAIUtils:
         parsed_message = {
             "role": OpenAIUtils.get_property(message, "role"),
             "content": OpenAIUtils.get_property(message, "content"),
+            "refusal": OpenAIUtils.get_property(message, "refusal"),
+            "audio": OpenAIUtils.get_property(message, "audio"),
             "function_call": OpenAIUtils.get_property(message, "function_call"),
             "tool_calls": tool_calls,
         }
