@@ -1,6 +1,7 @@
 import json, logging
 
 logger = logging.getLogger(__name__)
+
 MONITORED_KEYS = [
     "frequency_penalty",
     "functions",
@@ -28,7 +29,6 @@ MONITORED_KEYS = [
     "parallel_tool_calls"
 ]
 
-
 class OpenAIUtils:
     @staticmethod
     def parse_role(role):
@@ -55,11 +55,15 @@ class OpenAIUtils:
             ]
             tool_calls = tool_calls_serialized
 
+        audio = OpenAIUtils.get_property(message, "audio")
+        if audio is not None:
+            audio = json.loads(audio.model_dump_json(indent=2, exclude_unset=True))
+
         parsed_message = {
             "role": OpenAIUtils.get_property(message, "role"),
             "content": OpenAIUtils.get_property(message, "content"),
             "refusal": OpenAIUtils.get_property(message, "refusal"),
-            "audio": OpenAIUtils.get_property(message, "audio"),
+            "audio": audio,
             "function_call": OpenAIUtils.get_property(message, "function_call"),
             "tool_calls": tool_calls,
         }
@@ -76,6 +80,7 @@ class OpenAIUtils:
             or kwargs.get("deployment_id", None)
         )
         extra = {key: kwargs[key] for key in MONITORED_KEYS if key in kwargs}
+        
         return {"name": name, "input": messages, "extra": extra}
 
     @staticmethod
