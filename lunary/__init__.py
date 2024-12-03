@@ -1,15 +1,19 @@
-import warnings, traceback, logging, copy, time, chevron, aiohttp, copy
+from inspect import signature
+import traceback, logging, copy, time, chevron, aiohttp, copy
+from functools import wraps
+
 
 from packaging.version import parse as parse_version
 from importlib.metadata import version, PackageNotFoundError
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any, Callable, Union
 import jsonpickle
+from pydantic import BaseModel
 import humps
 
 from .exceptions import *
-from .parsers import default_input_parser, default_output_parser, filter_params
+from .parsers import default_input_parser, default_output_parser, filter_params, method_input_parser, PydanticHandler
 from .openai_utils import OpenAIUtils
 from .event_queue import EventQueue
 from .thread import Thread
@@ -39,27 +43,10 @@ run_manager = RunManager()
 
 from contextvars import ContextVar
 
-run_ctx = ContextVar("run_ctx", default=None)
-
-
-class RunContextManager:
-    def __init__(self, run_id: str):
-        run_ctx.set(run_id)
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        run_ctx.set(None)
-
-
-def run_context(id: str) -> RunContextManager:
-    return RunContextManager(id)
-
-
 class LunaryException(Exception):
     pass
 
+jsonpickle.handlers.register(BaseModel, PydanticHandler, base=True)
 
 def get_parent():
     parent = parent_ctx.get()
@@ -82,13 +69,14 @@ def get_parent_run_id(parent_run_id: str, run_type: str, app_id: str, run_id: st
     if parent_run_id == "None":
         parent_run_id = None
 
-    parent_run = run_ctx.get()
-    if parent_run and parent_run != run_id:
-        return str(create_uuid_from_string(str(parent_run) + str(app_id)))
+    
 
     parent_from_ctx = get_parent()
     if parent_from_ctx and run_type != "thread":
         return str(create_uuid_from_string(str(parent_from_ctx) + str(app_id)))
+
+    if parent_run_id:
+        return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
 
     if parent_run_id is not None:
         return str(create_uuid_from_string(str(parent_run_id) + str(app_id)))
@@ -365,82 +353,81 @@ def wrap(
     def sync_wrapper(*args, **kwargs):
         output = None
 
-        parent_run_id = kwargs.pop("parent", run_ctx.get()) 
+        parent_run_id = run_manager.current_run_id
         run = run_manager.start_run(run_id, parent_run_id)
 
-        with run_context(run.id):
+        try:
             try:
-                try:
-                    params = filter_params(kwargs)
-                    metadata = kwargs.pop("metadata", None)
-                    parsed_input = input_parser(*args, **kwargs)
+                params = filter_params(kwargs)
+                metadata = kwargs.pop("metadata", None)
+                parsed_input = input_parser(*args, **kwargs)
 
-                    track_event(
-                        type,
-                        "start",
-                        run_id=run.id,
-                        parent_run_id=parent_run_id,
-                        input=parsed_input["input"],
-                        name=name or parsed_input["name"],
-                        user_id=kwargs.pop("user_id", None)
-                        or user_ctx.get()
-                        or user_id,
-                        user_props=kwargs.pop("user_props", None)
-                        or user_props
-                        or user_props_ctx.get(),
-                        params=params,
-                        metadata=metadata,
-                        tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
-                        template_id=kwargs.get("extra_headers", {}).get(
-                            "Template-Id", None
-                        ),
-                        app_id=app_id,
-                    )
-                except Exception as e:
-                    logging.exception(e)
+                track_event(
+                    type,
+                    "start",
+                    run_id=run.id,
+                    parent_run_id=parent_run_id,
+                    input=parsed_input["input"],
+                    name=name or parsed_input["name"],
+                    user_id=kwargs.pop("user_id", None)
+                    or user_ctx.get()
+                    or user_id,
+                    user_props=kwargs.pop("user_props", None)
+                    or user_props
+                    or user_props_ctx.get(),
+                    params=params,
+                    metadata=metadata,
+                    tags=kwargs.pop("tags", None) or tags or tags_ctx.get(),
+                    template_id=kwargs.get("extra_headers", {}).get(
+                        "Template-Id", None
+                    ),
+                    app_id=app_id,
+                )
+            except Exception as e:
+                logging.exception(e)
 
-                if kwargs.get("stream") == True:
-                    return stream_handler(
-                        fn, run.id, name or parsed_input["name"], type, *args, **kwargs
-                    )
+            if kwargs.get("stream") == True:
+                return stream_handler(
+                    fn, run.id, name or parsed_input["name"], type, *args, **kwargs
+                )
 
-                try:
-                    output = fn(*args, **kwargs)
+            try:
+                output = fn(*args, **kwargs)
 
-                except Exception as e:
-                    track_event(
-                        type,
-                        "error",
-                        run.id,
-                        error={"message": str(e), "stack": traceback.format_exc()},
-                        app_id=app_id,
-                    )
+            except Exception as e:
+                track_event(
+                    type,
+                    "error",
+                    run.id,
+                    error={"message": str(e), "stack": traceback.format_exc()},
+                    app_id=app_id,
+                )
 
-                    # rethrow error
-                    raise e
+                # rethrow error
+                raise e
 
-                try:
-                    parsed_output = output_parser(output, kwargs.get("stream", False))
+            try:
+                parsed_output = output_parser(output, kwargs.get("stream", False))
 
-                    track_event(
-                        type,
-                        "end",
-                        run.id,
-                        name=name
-                        or parsed_input[
-                            "name"
-                        ],  # Need name in case need to compute tokens usage server side
-                        output=parsed_output["output"],
-                        token_usage=parsed_output["tokensUsage"],
-                        app_id=app_id
-                    )
-                    return output
-                except Exception as e:
-                    logger.exception(e)(e)
-                finally:
-                    return output
+                track_event(
+                    type,
+                    "end",
+                    run.id,
+                    name=name
+                    or parsed_input[
+                        "name"
+                    ],  # Need name in case need to compute tokens usage server side
+                    output=parsed_output["output"],
+                    token_usage=parsed_output["tokensUsage"],
+                    app_id=app_id
+                )
+                return output
+            except Exception as e:
+                logger.exception(e)(e)
             finally:
-                run_manager.end_run(run.id)
+                return output
+        finally:
+            run_manager.end_run(run.id)
 
     return sync_wrapper
 
@@ -646,22 +633,101 @@ def agent(name=None, user_id=None, user_props=None, tags=None, app_id=None):
 
     return decorator
 
-
-def chain(name=None, user_id=None, user_props=None, tags=None, app_id=None):
+def chain(
+    name: Optional[str] = None,
+    user_id: Optional[str] = None,
+    user_props: Optional[dict] = None,
+    tags: Optional[list] = None,
+    app_id: Optional[str] = None,
+    input_arg: Optional[str] = None
+):
     def decorator(fn):
-        return wrap(
-            fn,
-            "chain",
-            name=name or fn.__name__,
-            user_id=user_id,
-            user_props=user_props,
-            tags=tags,
-            input_parser=default_input_parser,
-            app_id=app_id
-        )
-
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if input_arg is not None:
+                from inspect import signature
+                sig = signature(fn)
+                param_names = list(sig.parameters.keys())
+                
+                input_value = None
+                
+                if input_arg in param_names:
+                    arg_index = param_names.index(input_arg)
+                    if arg_index < len(args):
+                        input_value = args[arg_index]
+                
+                if input_arg in kwargs:
+                    input_value = kwargs[input_arg]
+                
+                if input_value is None:
+                    raise ValueError(f"Specified input argument '{input_arg}' not found in function call")
+                
+                parsed_input = {"input": input_value}
+            else:
+                raw_input = default_input_parser(*args, **kwargs)
+                parsed_input = {"input": raw_input}
+            
+            return wrap(
+                fn,
+                "chain",
+                name=name or fn.__name__,
+                user_id=user_id,
+                user_props=user_props,
+                tags=tags,
+                input_parser=lambda *a, **kw: parsed_input,
+                app_id=app_id
+            )(*args, **kwargs)
+        
+        return wrapper
     return decorator
 
+def class_chain(
+    name: Optional[str] = None,
+    user_id: Optional[str] = None,
+    user_props: Optional[dict] = None,
+    tags: Optional[list] = None,
+    app_id: Optional[str | Callable] = None,
+    input_arg: Optional[str] = None
+):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            actual_app_id = app_id(self) if callable(app_id) else app_id
+
+            if input_arg is not None:
+                sig = signature(fn)
+                param_names = list(sig.parameters.keys())[1:]  # Skip 'self'
+                
+                input_value = None
+                
+                if input_arg in param_names:
+                    arg_index = param_names.index(input_arg)
+                    if arg_index < len(args):
+                        input_value = args[arg_index]
+                
+                if input_arg in kwargs:
+                    input_value = kwargs[input_arg]
+                
+                if input_value is None:
+                    raise ValueError(f"Specified input argument '{input_arg}' not found in method call")
+                
+                parsed_input = {"input": input_value}
+                custom_parser = lambda self, *a, **kw: parsed_input
+            else:
+                custom_parser = lambda self, *a, **kw: {"input": method_input_parser(self, *a, **kw)}
+
+            return wrap(
+                fn,
+                "chain",
+                name=name or fn.__name__,
+                user_id=user_id,
+                user_props=user_props,
+                tags=tags,
+                input_parser=custom_parser,
+                app_id=actual_app_id
+            )(self, *args, **kwargs)
+        return wrapper
+    return decorator
 
 def tool(name=None, user_id=None, user_props=None, tags=None, app_id=None):
     def decorator(fn):
@@ -953,7 +1019,7 @@ try:
         ) -> None:
             try:
                 if parent_run_id is None:
-                    parent_run_id = run_ctx.get()
+                    parent_run_id = run_manager.current_run_id
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -1012,7 +1078,7 @@ try:
         ) -> Any:
             try:
                 if parent_run_id is None:
-                    parent_run_id = run_ctx.get()
+                    parent_run_id = run_manager.current_run_id
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -1113,7 +1179,7 @@ try:
         ) -> None:
             try:
                 if parent_run_id is None:
-                    parent_run_id = run_ctx.get()
+                    parent_run_id = run_manager.current_run_id
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(metadata)
@@ -1177,7 +1243,7 @@ try:
         ) -> Any:
             try:
                 if parent_run_id is None:
-                    parent_run_id = run_ctx.get()
+                    parent_run_id = run_manager.current_run_id
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 if name is None and serialized:
@@ -1190,18 +1256,17 @@ try:
                 type = "chain"
                 metadata = metadata or {}
 
-                agentName = metadata.get("agent_name")
-                if agentName is None:
-                    agentName = metadata.get("agentName")
+                agent_name = metadata.get("agent_name", metadata.get("agentName"))
 
                 if name == "AgentExecutor" or name == "PlanAndExecute":
                     type = "agent"
-                if agentName is not None:
+                if agent_name is not None:
                     type = "agent"
-                    name = agentName
+                    name = agent_name
                 if parent_run_id is not None:
                     type = "chain"
-                    name = kwargs.get("name")
+                    name = kwargs.get("name", name)
+
 
                 user_id = _get_user_id(metadata)
                 user_props = _get_user_props(metadata)
@@ -1360,7 +1425,7 @@ try:
         ) -> None:
             try:
                 if parent_run_id is None:
-                    parent_run_id = run_ctx.get()
+                    parent_run_id = run_manager.current_run_id
                 run = run_manager.start_run(run_id, parent_run_id)
 
                 user_id = _get_user_id(kwargs.get("metadata"))
@@ -1446,7 +1511,7 @@ except Exception as e:
     # Do not raise or print error for users that do not have Langchain installed
     pass
 
-def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_id: str | None = None):
+def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_id: str | None = None, user_id: str | None = None, user_props: Any | None = None):
     """
     Opens a new thread or connects to an existing one.
 
@@ -1468,7 +1533,7 @@ def open_thread(id: Optional[str] = None, tags: Optional[List[str]] = None, app_
         if not token:
             raise ThreadError("API token is required")
 
-        return Thread(track_event=track_event, id=id, tags=tags)
+        return Thread(track_event=track_event, id=id, tags=tags, user_id=user_id, user_props=user_props)
     except Exception as e:
         raise ThreadError(f"Error opening thread: {str(e)}")
 
