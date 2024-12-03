@@ -773,23 +773,6 @@ try:
 
     spans: Dict[str, Any] = {}
 
-    PARAMS_TO_CAPTURE = [
-        "temperature",
-        "top_p",
-        "top_k",
-        "stop",
-        "presence_penalty",
-        "frequency_penalty",
-        "seed",
-        "function_call",
-        "functions",
-        "tools",
-        "tool_choice",
-        "response_format",
-        "max_tokens",
-        "logit_bias",
-    ]
-
     class UserContextManager:
         """Context manager for Lunary user context."""
 
