@@ -1,7 +1,6 @@
 import json, logging
 
 logger = logging.getLogger(__name__)
-
 MONITORED_KEYS = [
     "frequency_penalty",
     "functions",
