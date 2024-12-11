@@ -1402,6 +1402,7 @@ try:
             query: str,
             run_id: Optional[UUID] = None,
             parent_run_id: Optional[UUID] = None,
+            name: Union[str, None] = None,
             **kwargs: Any,
         ) -> None:
             try:
@@ -1412,7 +1413,8 @@ try:
                 user_id = _get_user_id(kwargs.get("metadata"))
                 user_props = _get_user_props(kwargs.get("metadata"))
 
-                name = serialized.get("name")
+                if name is None and serialized:
+                    name = serialized.get("name")
 
                 self.__track_event(
                     "retriever",
