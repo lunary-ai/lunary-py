@@ -15,6 +15,7 @@ import humps
 from .exceptions import *
 from .parsers import default_input_parser, default_output_parser, filter_params, method_input_parser, PydanticHandler
 from .openai_utils import OpenAIUtils
+from .ibm_utils import IBMUtils
 from .event_queue import EventQueue
 from .thread import Thread
 from .utils import clean_nones, create_uuid_from_string
@@ -563,6 +564,15 @@ def async_wrap(
 
     return wrapper
 
+
+def monitor_ibm(object):
+    object.chat = wrap(
+        object.chat,
+        "llm",
+        input_parser=IBMUtils.parse_input,
+        output_parser=IBMUtils.parse_output,
+        name=object.model_id,
+    )
 
 def monitor(object):
     try:
