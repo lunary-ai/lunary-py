@@ -1127,7 +1127,6 @@ try:
                 run_id = run_manager.end_run(run_id)
 
                 token_usage = (response.llm_output or {}).get("token_usage", {})
-
                 parsed_output: Any = [
                     (
                         _parse_lc_message(generation.message)
@@ -1137,6 +1136,7 @@ try:
                     for generation in response.generations[0]
                 ]
 
+                # if it's an array of 1, just parse the first element
                 if len(parsed_output) == 1:
                     parsed_output = parsed_output[0]
 
