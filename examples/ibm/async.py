@@ -1,4 +1,4 @@
-import os
+import os, asyncio
 from ibm_watsonx_ai import Credentials
 from ibm_watsonx_ai.foundation_models import ModelInference
 import lunary
@@ -12,9 +12,12 @@ model = ModelInference(
     )
 lunary.monitor(model)
 
-messages = [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Who won the world series in 2020?"}
-]
-# response = model.chat(messages=messages, tags=["baseball"], user_id="1234", user_props={"name": "Alice"})
-response = model.chat(messages=messages)
+async def main():
+  messages = [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Who won the world series in 2020?"}
+  ]
+  response = await model.achat(messages=messages)
+  print(response)
+
+asyncio.run(main())

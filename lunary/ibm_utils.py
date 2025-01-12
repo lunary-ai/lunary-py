@@ -33,12 +33,11 @@ KWARGS_TO_CAPTURE = [
 class IBMUtils:
     @staticmethod
     def parse_message(message):
-        tool_calls = message.get("tool_calls")
-
         parsed_message = {
             "role": message.get("role"),
             "content": message.get("content"), 
-            "tool_calls": tool_calls
+            "tool_calls": message.get("tool_calls", None),
+            "tool_call_id": message.get("tool_call_id", None)
         }
         return parsed_message
 
