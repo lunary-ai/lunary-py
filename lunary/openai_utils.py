@@ -45,14 +45,6 @@ class OpenAIUtils:
 
     @staticmethod
     def parse_message(message):
-        tool_calls = OpenAIUtils.get_property(message, "tool_calls")
-
-        if tool_calls is not None:
-            tool_calls_serialized = [
-                json.loads(tool_call.model_dump_json(indent=2, exclude_unset=True))
-                for tool_call in tool_calls
-            ]
-            tool_calls = tool_calls_serialized
 
         audio = OpenAIUtils.get_property(message, "audio")
         if audio is not None:
@@ -63,8 +55,8 @@ class OpenAIUtils:
             "content": OpenAIUtils.get_property(message, "content"),
             "refusal": OpenAIUtils.get_property(message, "refusal"),
             "audio": audio,
-            "function_call": OpenAIUtils.get_property(message, "function_call"),
-            "tool_calls": tool_calls,
+            "tool_calls": OpenAIUtils.get_property(message, "tool_calls"),
+            "tool_call_id": OpenAIUtils.get_property(message, "tool_call_id"),
         }
         return parsed_message
 

@@ -45,7 +45,7 @@ def default_output_parser(output, *args, **kwargs):
 class PydanticHandler(jsonpickle.handlers.BaseHandler):
     def flatten(self, obj, data):
         """Convert Pydantic model to a JSON-friendly dict using model_dump_json()"""
-        return jsonpickle.loads(obj.model_dump_json())
+        return jsonpickle.loads(obj.model_dump_json(), safe=True)
 
 PARAMS_TO_CAPTURE = [
   "frequency_penalty",

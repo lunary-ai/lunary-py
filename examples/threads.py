@@ -1,21 +1,24 @@
 import lunary
-from dotenv import load_dotenv
+from openai import OpenAI
 import time
 
-load_dotenv()
+client = OpenAI()
+lunary.monitor(client)
 
 thread = lunary.open_thread()
 
-thread.track_message({
-  "role": "user",
-  "content": "Hello!"
-})
+message = { "role": "user", "content": "Hello!" }
+msg_id = thread.track_message(message)
+chat_completion = client.chat.completions.create(
+    messages=[message],
+    model="gpt-4o",
+    parent=msg_id
+)
 
-time.sleep(0.5)
 
 thread.track_message({
   "role": "assistant",
-  "content": "How can I help you?"
+  "content": chat_completion.choices[0].message.content 
 })
 
 time.sleep(0.5)

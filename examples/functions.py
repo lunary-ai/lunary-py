@@ -1,9 +1,7 @@
-from dotenv import load_dotenv
 import openai
 import os
 import lunary
 
-load_dotenv()
 
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 

@@ -7,4 +7,4 @@ handler2 = LunaryCallbackHandler(app_id="5f3553ff-028c-4b8c-86c4-134627ab5e51")
 chat = ChatOpenAI(
   callbacks=[handler1, handler2],
 )
-chat.invoke("Write a random string of 4 letters")
+chat.stream("Write a random string of 4 letters")

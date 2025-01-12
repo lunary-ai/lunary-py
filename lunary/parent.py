@@ -1,3 +1,4 @@
+# used for reconciliating messages with Langchain: https://lunary.ai/docs/features/chats#reconciliate-with-llm-calls--agents
 from contextvars import ContextVar
 
 parent_ctx = ContextVar("parent_ctx", default=None)

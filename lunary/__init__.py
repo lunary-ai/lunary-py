@@ -3,8 +3,8 @@ import traceback, logging, copy, time, chevron, aiohttp, copy
 from functools import wraps
 
 
-from packaging.version import parse as parse_version
-from importlib.metadata import version, PackageNotFoundError
+from packaging import version
+from importlib.metadata import PackageNotFoundError
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Optional, Any, Callable, Union
@@ -15,6 +15,7 @@ import humps
 from .exceptions import *
 from .parsers import default_input_parser, default_output_parser, filter_params, method_input_parser, PydanticHandler
 from .openai_utils import OpenAIUtils
+from .ibm_utils import IBMUtils
 from .event_queue import EventQueue
 from .thread import Thread
 from .utils import clean_nones, create_uuid_from_string
@@ -161,7 +162,7 @@ def track_event(
         logger.exception("Error in `track_event`", e)
 
 
-def stream_handler(fn, run_id, name, type, *args, **kwargs):
+def default_stream_handler(fn, run_id, name, type, *args, **kwargs):
     try:
         stream = fn(*args, **kwargs)
 
@@ -267,7 +268,6 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
 
         content = choice.delta.content
         role = choice.delta.role
-        function_call = choice.delta.function_call
         tool_calls = choice.delta.tool_calls
 
         if len(choices) <= index:
@@ -287,15 +287,6 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
 
         if role:
             choices[index]["message"]["role"] = role
-
-        if hasattr(function_call, "name"):
-            choices[index]["message"]["function_call"]["name"] = function_call.name
-
-        if hasattr(function_call, "arguments"):
-            choices[index]["message"]["function_call"].setdefault("arguments", "")
-            choices[index]["message"]["function_call"][
-                "arguments"
-            ] += function_call.arguments
 
         if isinstance(tool_calls, list):
             for tool_call in tool_calls:
@@ -335,6 +326,59 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
     )
     return
 
+def ibm_stream_handler(fn, run_id, name, type, *args, **kwargs):
+    try:
+        stream = fn(*args, **kwargs)
+
+        content = ""
+        tool_call = {} ## TODO: handle multiple tool calls in response
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        for chunk in stream:
+            prompt_tokens = chunk['usage']['prompt_tokens']
+            completion_tokens = chunk['usage'].get('completion_tokens', 0)
+
+            delta = chunk['choices'][0]['delta']
+            content += delta.get('content', '')
+
+            if 'tool_calls' in delta:
+                if delta['tool_calls'][0].get('id'):
+                    tool_call['id'] = delta['tool_calls'][0]['id']
+                if delta['tool_calls'][0].get('type'):
+                    tool_call['type'] = delta['tool_calls'][0]['type']
+                if delta['tool_calls'][0].get('function'):
+                    if tool_call.get('function') is None:
+                        tool_call['function'] = {
+                            "name": '',
+                            "arguments": ''
+                        }
+                    tool_call['function']["name"] += delta['tool_calls'][0]['function']['name']
+                    tool_call['function']["arguments"] += delta['tool_calls'][0]['function']['arguments']
+
+            yield chunk
+    finally:
+        stream.close()
+
+    output = {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": [tool_call] if tool_call else None
+    } 
+    token_usage = {
+        "prompt": prompt_tokens,
+        "completion": completion_tokens
+    }
+    track_event(
+        type,
+        "end",
+        run_id,
+        name=name,
+        output=output,
+        token_usage=token_usage
+    )
+    return
+
 
 def wrap(
     fn,
@@ -347,9 +391,13 @@ def wrap(
     input_parser=default_input_parser,
     output_parser=default_output_parser,
     app_id=None,
+    stream: bool = False,
+    stream_handler=default_stream_handler, # TODO: this is not the default, it's only used for OpenAI, so pass it directly in monitor()
 ):
     def sync_wrapper(*args, **kwargs):
         output = None
+        nonlocal stream
+        stream = stream or kwargs.get("stream", False)
 
         parent_run_id = kwargs.pop("parent", run_manager.current_run_id) 
         run = run_manager.start_run(run_id, parent_run_id)
@@ -384,7 +432,7 @@ def wrap(
             except Exception as e:
                 logging.exception(e)
 
-            if kwargs.get("stream") == True:
+            if stream == True:
                 return stream_handler(
                     fn, run.id, name or parsed_input["name"], type, *args, **kwargs
                 )
@@ -405,7 +453,7 @@ def wrap(
                 raise e
 
             try:
-                parsed_output = output_parser(output, kwargs.get("stream", False))
+                parsed_output = output_parser(output, stream)
 
                 track_event(
                     type,
@@ -440,6 +488,7 @@ def async_wrap(
     input_parser=default_input_parser,
     output_parser=default_output_parser,
     app_id=None,
+    stream: bool = False,
 ):
     async def wrapper(*args, **kwargs):
         async def async_wrapper(*args, **kwargs):
@@ -447,6 +496,7 @@ def async_wrap(
 
             parent_run_id = kwargs.pop("parent", run_manager.current_run_id) 
             run = run_manager.start_run(parent_run_id=parent_run_id)
+
 
             try:
                 try:
@@ -556,7 +606,9 @@ def async_wrap(
             finally:
                 run_manager.end_run(run.id)
 
-        if kwargs.get("stream") == True:
+        nonlocal stream
+        stream = stream or kwargs.get("stream", False)
+        if stream == True:
             return async_stream_wrapper(*args, **kwargs)
         else:
             return await async_wrapper(*args, **kwargs)
@@ -566,54 +618,65 @@ def async_wrap(
 
 def monitor(object):
     try:
-        openai_version = parse_version(version("openai"))
-        name = getattr(object, "__name__", getattr(type(object), "__name__", None))
+        package_name = object.__class__.__module__.split(".")[0]
 
-        if openai_version >= parse_version("1.0.0") and openai_version < parse_version(
-            "2.0.0"
-        ):
-            name = getattr(type(object), "__name__", None)
-            if name == "openai" or name == "OpenAI" or name == "AzureOpenAI":
-                try:
-                    object.chat.completions.create = wrap(
+        if package_name == "ibm_watsonx_ai":
+            installed_version = importlib.metadata.version("ibm-watsonx-ai")
+            if version.parse(installed_version) >= version.parse("1.0.0"):
+                model_name= object.model_id.split('/')[1]
+                object.chat = wrap(
+                    object.chat,
+                    "llm",
+                    input_parser=IBMUtils.parse_input,
+                    output_parser=IBMUtils.parse_output,
+                    name=model_name,
+                )
+                object.chat_stream = wrap(
+                    object.chat_stream,
+                    "llm",
+                    input_parser=IBMUtils.parse_input,
+                    output_parser=IBMUtils.parse_output,
+                    name=model_name,
+                    stream=True,
+                    stream_handler=ibm_stream_handler,
+                )
+                object.achat = async_wrap(
+                    object.achat,
+                    "llm",
+                    input_parser=IBMUtils.parse_input,
+                    output_parser=IBMUtils.parse_output,
+                    name=model_name,
+                )
+            else:
+                logging.warning("Version 1.0.0 or higher of ibm-watsonx-ai is required")
+            return
+
+        if package_name == "openai":    
+            installed_version = importlib.metadata.version("openai")
+            if version.parse(installed_version) >= version.parse("1.0.0"):
+                client_name = getattr(type(object), "__name__", None)
+                if client_name == "openai" or client_name == "OpenAI" or client_name == "AzureOpenAI":
+                    try:
+                        object.chat.completions.create = wrap(
+                            object.chat.completions.create,
+                            "llm",
+                            input_parser=OpenAIUtils.parse_input,
+                            output_parser=OpenAIUtils.parse_output,
+                        )
+                    except Exception as e:
+                        logging.info(
+                            "Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
+                        )
+                elif client_name == "AsyncOpenAI" or client_name == "AsyncAzureOpenAI":
+                    object.chat.completions.create = async_wrap(
                         object.chat.completions.create,
                         "llm",
                         input_parser=OpenAIUtils.parse_input,
                         output_parser=OpenAIUtils.parse_output,
                     )
-                except Exception as e:
-                    logging.info(
-                        "Please use `lunary.monitor(openai)` or `lunary.monitor(client)` after setting the OpenAI api key"
-                    )
-
-            elif name == "AsyncOpenAI" or name == "AsyncAzureOpenAI":
-                object.chat.completions.create = async_wrap(
-                    object.chat.completions.create,
-                    "llm",
-                    input_parser=OpenAIUtils.parse_input,
-                    output_parser=OpenAIUtils.parse_output,
-                )
-            else:
-                logging.info(
-                    "Unknown OpenAI client. You can only use `lunary.monitor(openai)` or `lunary.monitor(client)`"
-                )
-        elif openai_version < parse_version("1.0.0"):
-            object.ChatCompletion.create = wrap(
-                object.ChatCompletion.create,
-                "llm",
-                input_parser=OpenAIUtils.parse_input,
-                output_parser=OpenAIUtils.parse_output,
-            )
-
-            object.ChatCompletion.acreate = wrap(
-                object.ChatCompletion.acreate,
-                "llm",
-                input_parser=OpenAIUtils.parse_input,
-                output_parser=OpenAIUtils.parse_output,
-            )
-
+                return
     except PackageNotFoundError:
-        logging.info("The `openai` package is not installed")
+        logging.warning("You need to install either `openai` or `ibm-watsonx-ai` to monitor your LLM calls.")
 
 
 def agent(name=None, user_id=None, user_props=None, tags=None, app_id=None):
