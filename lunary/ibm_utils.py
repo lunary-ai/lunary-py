@@ -33,16 +33,18 @@ KWARGS_TO_CAPTURE = [
 class IBMUtils:
     @staticmethod
     def parse_message(message):
+        tool_calls = message.get("tool_calls")
+
         parsed_message = {
             "role": message.get("role"),
             "content": message.get("content"), 
+            "tool_calls": tool_calls
         }
         return parsed_message
 
 
     @staticmethod
     def parse_input(*args, **kwargs):
-        print(args, kwargs)
         try:
             messages = [IBMUtils.parse_message(message) for message in kwargs["messages"]]
             name = kwargs.get("model")

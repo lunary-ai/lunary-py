@@ -15,4 +15,8 @@ messages = [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Who won the world series in 2020?"}
 ]
-response = model.chat(messages=messages, tags=["baseball"], user_id="1234", user_props={"name": "Alice"})
+response = model.chat_stream(messages=messages)
+
+for chunk in response:
+  pass
+

@@ -162,7 +162,7 @@ def track_event(
         logger.exception("Error in `track_event`", e)
 
 
-def stream_handler(fn, run_id, name, type, *args, **kwargs):
+def default_stream_handler(fn, run_id, name, type, *args, **kwargs):
     try:
         stream = fn(*args, **kwargs)
 
@@ -268,7 +268,6 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
 
         content = choice.delta.content
         role = choice.delta.role
-        function_call = choice.delta.function_call
         tool_calls = choice.delta.tool_calls
 
         if len(choices) <= index:
@@ -336,6 +335,60 @@ async def async_stream_handler(fn, run_id, name, type, *args, **kwargs):
     )
     return
 
+def ibm_stream_handler(fn, run_id, name, type, *args, **kwargs):
+    try:
+        stream = fn(*args, **kwargs)
+
+        content = ""
+        tool_call = {} ## TODO: handle multiple tool calls in response
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        for chunk in stream:
+            prompt_tokens = chunk['usage']['prompt_tokens']
+            completion_tokens = chunk['usage'].get('completion_tokens', 0)
+
+            delta = chunk['choices'][0]['delta']
+            content += delta.get('content', '')
+
+            if 'tool_calls' in delta:
+                if delta['tool_calls'][0].get('id'):
+                    tool_call['id'] = delta['tool_calls'][0]['id']
+                if delta['tool_calls'][0].get('type'):
+                    tool_call['type'] = delta['tool_calls'][0]['type']
+                if delta['tool_calls'][0].get('function'):
+                    if tool_call.get('function') is None:
+                        tool_call['function'] = {
+                            "name": '',
+                            "arguments": ''
+                        }
+                    tool_call['function']["name"] += delta['tool_calls'][0]['function']['name']
+                    tool_call['function']["arguments"] += delta['tool_calls'][0]['function']['arguments']
+
+            yield chunk
+    finally:
+        stream.close()
+
+    output = {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": [tool_call]
+    } 
+    token_usage = {
+        "prompt": prompt_tokens,
+        "completion": completion_tokens
+    }
+    track_event(
+        type,
+        "end",
+        run_id,
+        name=name,
+        output=output,
+        token_usage=token_usage
+    )
+    return
+
+
 
 def wrap(
     fn,
@@ -348,9 +401,13 @@ def wrap(
     input_parser=default_input_parser,
     output_parser=default_output_parser,
     app_id=None,
+    stream: bool = False,
+    stream_handler=default_stream_handler, # TODO: this is not the default, it's only used for OpenAI, so pass it directly in monitor()
 ):
     def sync_wrapper(*args, **kwargs):
         output = None
+        nonlocal stream
+        stream = stream or kwargs.get("stream", False)
 
         parent_run_id = kwargs.pop("parent", run_manager.current_run_id) 
         run = run_manager.start_run(run_id, parent_run_id)
@@ -385,7 +442,7 @@ def wrap(
             except Exception as e:
                 logging.exception(e)
 
-            if kwargs.get("stream") == True:
+            if stream == True:
                 return stream_handler(
                     fn, run.id, name or parsed_input["name"], type, *args, **kwargs
                 )
@@ -406,7 +463,7 @@ def wrap(
                 raise e
 
             try:
-                parsed_output = output_parser(output, kwargs.get("stream", False))
+                parsed_output = output_parser(output, stream)
 
                 track_event(
                     type,
@@ -566,12 +623,22 @@ def async_wrap(
 
 
 def monitor_ibm(object):
+    model_name= object.model_id.split('/')[1]
     object.chat = wrap(
         object.chat,
         "llm",
         input_parser=IBMUtils.parse_input,
         output_parser=IBMUtils.parse_output,
-        name=object.model_id,
+        name=model_name,
+    )
+    object.chat_stream = wrap(
+        object.chat_stream,
+        "llm",
+        input_parser=IBMUtils.parse_input,
+        output_parser=IBMUtils.parse_output,
+        name=model_name,
+        stream=True,
+        stream_handler=ibm_stream_handler,
     )
 
 def monitor(object):
