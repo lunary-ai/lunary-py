@@ -1089,6 +1089,25 @@ try:
                 params = filter_params(params)
                 input = _parse_input(prompts)
 
+                agentName = metadata.get("agentName")
+
+                if agentName is not None:
+                    self.__track_event(
+                        "agent",
+                        "start",
+                        user_id=user_id,
+                        run_id=run_id_str,
+                        parent_run_id=parent_run_id,
+                        name=name,
+                        input=input,
+                        tags=tags,
+                        metadata=metadata,
+                        params=params,
+                        user_props=user_props,
+                        app_id=self.__app_id,
+                        callback_queue=self.queue
+                    )
+
                 self.__track_event(
                     "llm",
                     "start",
